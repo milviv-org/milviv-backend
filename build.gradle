@@ -1,9 +1,9 @@
 /*
  * ============================================================================
- * SKYRIMGRADE - Backend REST API
+ * MILVIV - Backend REST API
  * ============================================================================
  * 
- * Описание: Система управления задачами с геймификацией (Skyrim-style levels)
+ * Описание: Система управления задачами с геймификацией (RPG-style levels)
  * Архитектура: Clean Architecture + DDD (Domain-Driven Design)
  * 
  * Философия проекта:
@@ -31,7 +31,7 @@ plugins {
     id 'application'
 }
 
-group = 'com.skyrimgrade'
+group = 'com.milviv'
 version = '1.0.0'
 
 java {
@@ -202,7 +202,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'com.skyrimgrade.presentation.Main'
+    mainClass = 'com.milviv.presentation.Main'
 }
 
 test {
@@ -222,8 +222,8 @@ test {
 tasks.named('jar') {
     manifest {
         attributes(
-            'Main-Class': 'com.skyrimgrade.presentation.Main',
-            'Implementation-Title': 'SkyrimGrade',
+            'Main-Class': 'com.milviv.presentation.Main',
+            'Implementation-Title': 'MILVIV',
             'Implementation-Version': version
         )
     }
@@ -234,7 +234,7 @@ tasks.register('fatJar', Jar) {
     archiveClassifier = 'all'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
-        attributes 'Main-Class': 'com.skyrimgrade.presentation.Main'
+        attributes 'Main-Class': 'com.milviv.presentation.Main'
     }
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }

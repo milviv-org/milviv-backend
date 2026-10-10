@@ -1,10 +1,10 @@
-# SkyrimGrade
+# MILVIV
 
-Геймификация задач с системой уровней сложности из Skyrim.
+Геймификация задач с RPG-системой уровней сложности.
 
 ## 📋 Описание
 
-SkyrimGrade - это приложение для управления задачами и проектами с элементами геймификации. Выполняйте задачи, получайте баллы и накапливайте их для материальных вознаграждений.
+MILVIV - это приложение для управления задачами и проектами с элементами геймификации. Выполняйте задачи, получайте баллы и накапливайте их для материальных вознаграждений.
 
 ### Основные возможности
 
@@ -77,12 +77,12 @@ src/
 
 1. Создайте базу данных PostgreSQL:
 ```sql
-CREATE DATABASE skyrimgrade;
+CREATE DATABASE milviv;
 ```
 
 2. Настройте подключение в `src/main/resources/application.properties` или через environment variables:
 ```bash
-export DB_URL=jdbc:postgresql://localhost:5432/skyrimgrade
+export DB_URL=jdbc:postgresql://localhost:5432/milviv
 export DB_USERNAME=your_username
 export DB_PASSWORD=your_password
 ```
@@ -108,7 +108,7 @@ SQL миграции находятся в `src/main/resources/db/migration/`. �
 ./gradlew run
 
 # Или через JAR
-java -jar build/libs/skyrim-grade-all-1.0.0.jar
+java -jar build/libs/milviv-all-1.0.0.jar
 ```
 
 По умолчанию сервер запустится на `http://localhost:8080`
@@ -167,13 +167,13 @@ GET    /api/errors?page=1&level=ERROR - Логи ошибок
 ./gradlew test
 
 # Запуск unit тестов
-./gradlew test --tests "com.skyrimgrade.unit.*"
+./gradlew test --tests "com.milviv.unit.*"
 
 # Запуск integration тестов
-./gradlew test --tests "com.skyrimgrade.integration.*"
+./gradlew test --tests "com.milviv.integration.*"
 
 # Запуск E2E тестов
-./gradlew test --tests "com.skyrimgrade.e2e.*"
+./gradlew test --tests "com.milviv.e2e.*"
 ```
 
 **Testcontainers** автоматически запустит PostgreSQL в Docker для интеграционных и E2E тестов.
@@ -184,7 +184,7 @@ GET    /api/errors?page=1&level=ERROR - Логи ошибок
 
 ```properties
 # Database
-db.url=jdbc:postgresql://localhost:5432/skyrimgrade
+db.url=jdbc:postgresql://localhost:5432/milviv
 db.username=postgres
 db.password=postgres
 
@@ -198,7 +198,7 @@ server.host=0.0.0.0
 Переменные окружения переопределяют настройки из properties:
 
 ```bash
-DB_URL=jdbc:postgresql://prod-server:5432/skyrimgrade
+DB_URL=jdbc:postgresql://prod-server:5432/milviv
 DB_USERNAME=prod_user
 DB_PASSWORD=prod_password
 SERVER_PORT=8080
@@ -207,10 +207,10 @@ SERVER_PORT=8080
 ## 📂 Структура проекта
 
 ```
-skyrim-grade/
+milviv/
 ├── src/
 │   ├── main/
-│   │   ├── java/com/skyrimgrade/
+│   │   ├── java/com/milviv/
 │   │   │   ├── domain/              # Entities, Value Objects, Repository interfaces
 │   │   │   ├── application/         # Use Cases
 │   │   │   ├── infrastructure/      # Repository implementations, DB config
@@ -220,7 +220,7 @@ skyrim-grade/
 │   │       ├── logback.xml
 │   │       └── db/migration/        # SQL миграции
 │   └── test/
-│       ├── java/com/skyrimgrade/
+│       ├── java/com/milviv/
 │       │   ├── unit/                # Unit тесты
 │       │   ├── integration/         # Integration тесты
 │       │   └── e2e/                 # E2E тесты

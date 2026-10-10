@@ -44,7 +44,7 @@
     </root>
     
     <!-- Package-specific logging -->
-    <logger name="com.skyrimgrade" level="DEBUG"/>
+    <logger name="com.milviv" level="DEBUG"/>
     <logger name="com.zaxxer.hikari" level="INFO"/>
     <logger name="org.eclipse.jetty" level="INFO"/>
     

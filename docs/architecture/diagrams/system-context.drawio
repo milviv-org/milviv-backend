@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Страница-1" id="J3UZADcD2MGJlklGJ-P0">
+    <mxGraphModel dx="1178" dy="656" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="-a2X830ERe-nc3gqcTT4-21" edge="1" parent="1" source="-a2X830ERe-nc3gqcTT4-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="-a2X830ERe-nc3gqcTT4-11" value="AI API">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-a2X830ERe-nc3gqcTT4-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C7C7C7;" value="MILVIV" vertex="1">
+          <mxGeometry height="70" width="180" x="330" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="-a2X830ERe-nc3gqcTT4-13" edge="1" parent="1" source="-a2X830ERe-nc3gqcTT4-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="-a2X830ERe-nc3gqcTT4-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-a2X830ERe-nc3gqcTT4-3" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="&lt;div&gt;User&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="30" x="405" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="-a2X830ERe-nc3gqcTT4-11" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="Google Gemini AI" vertex="1">
+          <mxGeometry height="80" width="80" x="380" y="545" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
