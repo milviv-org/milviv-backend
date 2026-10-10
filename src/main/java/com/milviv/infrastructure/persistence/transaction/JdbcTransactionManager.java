@@ -48,7 +48,7 @@ public final class JdbcTransactionManager implements TransactionManager {
         case REQUIRED -> executeRequired(isolation, action);
         case REQUIRES_NEW -> executeRequiresNew(isolation, action);
         case MANDATORY -> executeMandatory(action);
-        case SUPPORTS -> executeSupports(action);
+        case SUPPORTS -> executeSupports(isolation, action);
       };
     }
 
@@ -98,10 +98,15 @@ public final class JdbcTransactionManager implements TransactionManager {
     }
 
     /**
-     * Использует транзакцию если есть, без неё тоже работает.
+     * Присоединяется к текущей транзакции если она есть.
+     * Иначе — открывает read-only транзакцию: репозиториям нужно соединение,
+     * а запись внутри SUPPORTS без внешней транзакции запрещена.
      */
-    private <T> T executeSupports(Supplier<T> action) {
-      return action.get();
+    private <T> T executeSupports(IsolationLevel isolation, Supplier<T> action) {
+      if (ConnectionHolder.isActive()) {
+        return action.get();
+      }
+      return runInNewTransaction(isolation, true, action);
     }
 
     // -------------------------------------------------------------------------
@@ -109,13 +114,18 @@ public final class JdbcTransactionManager implements TransactionManager {
     // -------------------------------------------------------------------------
 
     private <T> T runInNewTransaction(IsolationLevel isolation, Supplier<T> action) {
-      Connection connection = acquireConnection(isolation);
+      return runInNewTransaction(isolation, false, action);
+    }
+
+    private <T> T runInNewTransaction(IsolationLevel isolation, boolean readOnly, Supplier<T> action) {
+      Connection connection = acquireConnection(isolation, readOnly);
       try {
         T result = action.get();
         connection.commit();
         logger.debug("Transaction committed");
         return result;
-      } catch(Exception ex) {
+      } catch(Throwable ex) {
+        // Throwable, а не Exception: откат обязателен и при Error (например, StackOverflowError)
         rollbackQuietly(connection);
         throw wrapIfChecked(ex);
       } finally {
@@ -124,15 +134,27 @@ public final class JdbcTransactionManager implements TransactionManager {
       }
     }
 
-    private Connection acquireConnection(IsolationLevel isolation) {
+    private Connection acquireConnection(IsolationLevel isolation, boolean readOnly) {
+      Connection connection;
       try {
-        Connection connection = dataSource.getConnection();
-        connection.setAutoCommit(false);
-        connection.setTransactionIsolation(isolation.getJdbcLevel());
-        ConnectionHolder.bind(connection);
-        return connection;
+        connection = dataSource.getConnection();
       } catch (SQLException ex) {
         throw new DatabaseException("Failed to acquire connection for transaction", ex);
+      }
+
+      try {
+        connection.setAutoCommit(false);
+        connection.setTransactionIsolation(isolation.getJdbcLevel());
+        connection.setReadOnly(readOnly);
+        ConnectionHolder.bind(connection);
+        return connection;
+      } catch (SQLException | RuntimeException ex) {
+        // Соединение уже взято из пула — вернуть его, иначе пул постепенно иссякнет
+        releaseConnection(connection);
+        if (ex instanceof RuntimeException runtimeEx) {
+          throw runtimeEx;
+        }
+        throw new DatabaseException("Failed to configure connection for transaction", ex);
       }
     }
 
@@ -154,9 +176,12 @@ public final class JdbcTransactionManager implements TransactionManager {
       }
     }
 
-    private RuntimeException wrapIfChecked(Exception ex) {
+    private RuntimeException wrapIfChecked(Throwable ex) {
       if (ex instanceof RuntimeException runtimeEx) {
         return runtimeEx;
+      }
+      if (ex instanceof Error error) {
+        throw error;
       }
       return new DatabaseException("Transaction failed with checked exception", ex);
     }

@@ -248,12 +248,65 @@ class JdbcTransactionManagerTest {
     // ─── SUPPORTS ─────────────────────────────────────────────────────────────
 
     @Test
-    void supports_shouldRunWithoutOpeningTransaction() throws SQLException {
+    void supports_shouldOpenReadOnlyTransaction_whenNoneActive() throws SQLException {
         // when
-        String result = transactionManager.execute(Propagation.SUPPORTS, () -> "ok");
+        Connection seen = transactionManager.execute(Propagation.SUPPORTS, () -> ConnectionHolder.require());
 
         // then
-        assertThat(result).isEqualTo("ok");
-        verify(dataSource, never()).getConnection();
+        assertThat(seen).isSameAs(outerConnection);
+        verify(outerConnection).setReadOnly(true);
+        verify(outerConnection).commit();
+        verify(outerConnection).close();
+        assertThat(ConnectionHolder.isActive()).isFalse();
+    }
+
+    @Test
+    void supports_shouldJoinExistingTransaction() throws SQLException {
+        // when
+        Connection seen = transactionManager.execute(() ->
+                transactionManager.execute(Propagation.SUPPORTS, () -> ConnectionHolder.require()));
+
+        // then
+        assertThat(seen).isSameAs(outerConnection);
+        verify(dataSource, times(1)).getConnection();
+        verify(outerConnection, never()).setReadOnly(true);
+    }
+
+    @Test
+    void required_shouldNotBeReadOnly() throws SQLException {
+        // when
+        transactionManager.execute(() -> "ok");
+
+        // then
+        verify(outerConnection).setReadOnly(false);
+    }
+
+    // ─── Возврат соединения и Error ───────────────────────────────────────────
+
+    @Test
+    void execute_shouldReleaseConnection_whenConfiguringFails() throws SQLException {
+        // given
+        org.mockito.Mockito.doThrow(new SQLException("cannot set autocommit")).when(outerConnection).setAutoCommit(false);
+
+        // when / then
+        assertThatThrownBy(() -> transactionManager.execute(() -> "ok"))
+                .isInstanceOf(DatabaseException.class)
+                .hasCauseInstanceOf(SQLException.class);
+        verify(outerConnection).close();
+        assertThat(ConnectionHolder.isActive()).isFalse();
+    }
+
+    @Test
+    void execute_shouldRollbackAndRethrow_whenActionThrowsError() throws SQLException {
+        // given
+        StackOverflowError error = new StackOverflowError("deep");
+
+        // when / then
+        assertThatThrownBy(() -> transactionManager.execute(() -> { throw error; }))
+                .isSameAs(error);
+        verify(outerConnection).rollback();
+        verify(outerConnection, never()).commit();
+        verify(outerConnection).close();
+        assertThat(ConnectionHolder.isActive()).isFalse();
     }
 }

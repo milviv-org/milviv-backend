@@ -85,7 +85,7 @@ public final class RetryableTransactionManager implements TransactionManager {
       } catch(OptimisticLockException ex) {
         attempt++;
         if (attempt >= maxRetries) {
-          logger.warn("OptimisticLockException after {} at attempts, giving up", attempt);
+          logger.warn("OptimisticLockException after {} attempts, giving up", attempt);
           throw ex;
         }
         logger.debug("OptimisticLockException on attempt {}, retrying...", attempt);
@@ -131,14 +131,14 @@ public final class RetryableTransactionManager implements TransactionManager {
 
   /**
    * Открывает ли этот вызов собственную транзакцию.
-   * REQUIRED — только если внешней нет; REQUIRES_NEW — всегда;
-   * MANDATORY и SUPPORTS своей транзакции не открывают.
+   * REQUIRED и SUPPORTS — только если внешней нет; REQUIRES_NEW — всегда;
+   * MANDATORY своей транзакции не открывает.
    */
   private boolean opensNewTransaction(Propagation propagation) {
     return switch (propagation) {
-      case REQUIRED -> !ConnectionHolder.isActive();
+      case REQUIRED, SUPPORTS -> !ConnectionHolder.isActive();
       case REQUIRES_NEW -> true;
-      case MANDATORY, SUPPORTS -> false;
+      case MANDATORY -> false;
     };
   }
 

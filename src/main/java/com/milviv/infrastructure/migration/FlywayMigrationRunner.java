@@ -21,7 +21,7 @@ public class FlywayMigrationRunner {
     }
 
     public void migrate() {
-        logger.info("Running Flywat migrations...");
+        logger.info("Running Flyway migrations...");
 
         try {
             Flyway flyway = Flyway.configure()

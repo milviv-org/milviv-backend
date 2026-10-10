@@ -233,9 +233,24 @@ class RetryableTransactionManagerTest {
     }
 
     @Test
-    void execute_shouldNotRetry_whenSupports() {
+    void execute_shouldRetry_whenSupportsOpensOwnTransaction() {
         // given
         delegateRunsAction();
+
+        // when
+        String result = transactionManager.execute(Propagation.SUPPORTS,
+                failingTimes(1, RetryableTransactionManagerTest::optimisticLock));
+
+        // then
+        assertThat(result).isEqualTo("ok");
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void execute_shouldNotRetry_whenSupportsJoinsActiveTransaction() {
+        // given
+        delegateRunsAction();
+        ConnectionHolder.bind(mock(Connection.class));
 
         // when / then
         assertThatThrownBy(() -> transactionManager.execute(Propagation.SUPPORTS,
