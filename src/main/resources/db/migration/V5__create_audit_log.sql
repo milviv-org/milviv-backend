@@ -1,12 +1,11 @@
 -- V5: Create audit log table for user actions history
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGSERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    action VARCHAR(50) NOT NULL, -- TASK_CREATED, TASK_COMPLETED, PROJECT_CREATED, etc.
-    entity_type VARCHAR(50) NOT NULL, -- TASK, PROJECT, PLAN
-    entity_id INTEGER,
-    details JSONB, -- Additional information in JSON format
-    ip_address VARCHAR(45), -- IPv4 or IPv6
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(50) NOT NULL, -- TASK_CREATED, TASK_UPDATED, TASK_DELETED, PROJECT_CREATED, etc.
+    entity_type VARCHAR(50) NOT NULL, -- GOAL, PROJECT, TASK, REWARD, PLAN
+    entity_id UUID,
+    details JSONB, -- например {"source": "AI", "requestId": "...", "fields": ["deadline"]}
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

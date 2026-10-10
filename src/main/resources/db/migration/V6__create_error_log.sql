@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS error_log (
     exception_message TEXT,
     stack_trace TEXT,
     request_id VARCHAR(50), -- To correlate multiple log entries from same request
-    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     endpoint VARCHAR(255), -- HTTP endpoint if applicable
     http_method VARCHAR(10) -- GET, POST, etc.
 );
