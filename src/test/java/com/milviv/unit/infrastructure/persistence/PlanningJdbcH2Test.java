@@ -43,6 +43,7 @@ import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.TaskReflectionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskRescheduleJdbcRepository;
 import com.milviv.infrastructure.persistence.transaction.JdbcTransactionManager;
 import com.milviv.infrastructure.persistence.transaction.RetryableTransactionManager;
@@ -84,7 +85,7 @@ class PlanningJdbcH2Test {
         PlanJdbcRepository planRepository = new PlanJdbcRepository(connections);
 
         plans = new PlanCommands(planRepository, new TaskRescheduleJdbcRepository(connections), taskRepository, tx, clock);
-        tasks = new TaskCommands(taskRepository, projectRepository, goalRepository, tx, clock);
+        tasks = new TaskCommands(taskRepository, projectRepository, goalRepository, new TaskReflectionJdbcRepository(connections), tx, clock);
         projects = new ProjectCommands(projectRepository, taskRepository, goalRepository, tx, clock);
         completeTask = new CompleteTask(taskRepository, new TaskCompletionJdbcRepository(connections),
                 new PointsHistoryJdbcRepository(connections), planRepository, tx, clock);

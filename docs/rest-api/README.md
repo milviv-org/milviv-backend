@@ -10,6 +10,7 @@
 | Задачи | [tasks-api.md](tasks-api.md) |
 | Планы и календарь | [planning-api.md](planning-api.md) |
 | Награды и баллы | [rewards-api.md](rewards-api.md) |
+| Рефлексия | [reflection-api.md](reflection-api.md) |
 
 ## Общие правила
 

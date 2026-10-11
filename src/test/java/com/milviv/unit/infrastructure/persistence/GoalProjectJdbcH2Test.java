@@ -36,6 +36,7 @@ import com.milviv.infrastructure.persistence.connection.TransactionalConnectionP
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.TaskReflectionJdbcRepository;
 import com.milviv.infrastructure.persistence.transaction.JdbcTransactionManager;
 import com.milviv.infrastructure.persistence.transaction.RetryableTransactionManager;
 
@@ -71,7 +72,7 @@ class GoalProjectJdbcH2Test {
 
         goals = new GoalCommands(goalRepository, tx, clock);
         projects = new ProjectCommands(projectRepository, taskRepository, goalRepository, tx, clock);
-        tasks = new TaskCommands(taskRepository, projectRepository, goalRepository, tx, clock);
+        tasks = new TaskCommands(taskRepository, projectRepository, goalRepository, new TaskReflectionJdbcRepository(connections), tx, clock);
     }
 
     @AfterEach

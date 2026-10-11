@@ -12,6 +12,7 @@ import com.milviv.domain.exception.ConflictException;
 import com.milviv.domain.exception.NotFoundException;
 import com.milviv.domain.goal.GoalRepository;
 import com.milviv.domain.project.ProjectRepository;
+import com.milviv.domain.reflection.TaskReflectionRepository;
 import com.milviv.domain.task.Task;
 import com.milviv.domain.task.TaskDetails;
 import com.milviv.domain.task.TaskFilter;
@@ -32,13 +33,15 @@ public class TaskCommands {
 
     private final TaskRepository tasks;
     private final TaskLinks links;
+    private final TaskReflectionRepository taskReflection;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public TaskCommands(TaskRepository tasks, ProjectRepository projects, GoalRepository goals,
-                        TransactionManager transactionManager, Clock clock) {
+                        TaskReflectionRepository taskReflection, TransactionManager transactionManager, Clock clock) {
         this.tasks = tasks;
         this.links = new TaskLinks(tasks, projects, goals);
+        this.taskReflection = taskReflection;
         this.transactionManager = transactionManager;
         this.clock = clock;
     }
@@ -50,6 +53,8 @@ public class TaskCommands {
             links.lock(userId, details.projectId());
             links.validate(userId, details);
             tasks.add(task);
+            // по умолчанию — стандартные вопросы; отключить можно, задав пустой набор
+            taskReflection.assignStandard(task.getId());
             links.refreshDifficulty(userId, details.projectId());
         });
         return view(task);

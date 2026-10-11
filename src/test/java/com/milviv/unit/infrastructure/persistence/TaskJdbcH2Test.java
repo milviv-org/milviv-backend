@@ -37,6 +37,7 @@ import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.TaskReflectionJdbcRepository;
 import com.milviv.infrastructure.persistence.transaction.JdbcTransactionManager;
 import com.milviv.infrastructure.persistence.transaction.RetryableTransactionManager;
 
@@ -74,7 +75,7 @@ class TaskJdbcH2Test {
         tasks = new TaskJdbcRepository(connections);
         completions = new TaskCompletionJdbcRepository(connections);
         points = new PointsHistoryJdbcRepository(connections);
-        commands = new TaskCommands(tasks, new ProjectJdbcRepository(connections), new GoalJdbcRepository(connections), tx, clock);
+        commands = new TaskCommands(tasks, new ProjectJdbcRepository(connections), new GoalJdbcRepository(connections), new TaskReflectionJdbcRepository(connections), tx, clock);
     }
 
     @AfterEach

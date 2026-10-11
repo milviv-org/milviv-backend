@@ -25,6 +25,9 @@ import com.milviv.application.planning.CalendarPolicy;
 import com.milviv.application.planning.CalendarQuery;
 import com.milviv.application.planning.PlanCommands;
 import com.milviv.application.project.ProjectCommands;
+import com.milviv.application.reflection.ReflectionPolicy;
+import com.milviv.application.reflection.ReflectionQuestionCommands;
+import com.milviv.application.reflection.TaskReflectionCommands;
 import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
@@ -36,11 +39,15 @@ import com.milviv.domain.goal.GoalRepository;
 import com.milviv.domain.planning.PlanRepository;
 import com.milviv.domain.planning.TaskRescheduleRepository;
 import com.milviv.domain.project.ProjectRepository;
+import com.milviv.domain.reflection.ReflectionAnswerRepository;
+import com.milviv.domain.reflection.ReflectionQuestionRepository;
+import com.milviv.domain.reflection.TaskReflectionRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.infrastructure.config.AppConfig;
 import com.milviv.infrastructure.config.AuthConfig;
 import com.milviv.infrastructure.config.CalendarConfig;
+import com.milviv.infrastructure.config.ReflectionConfig;
 import com.milviv.infrastructure.config.ConfigLoader;
 import com.milviv.infrastructure.config.ControllerRegistrar;
 import com.milviv.infrastructure.config.JacksonConfig;
@@ -62,10 +69,13 @@ import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepos
 import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.ReflectionAnswerJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.ReflectionQuestionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RewardJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.TaskReflectionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskRescheduleJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.UserJdbcRepository;
 import com.milviv.infrastructure.persistence.transaction.JdbcTransactionManager;
@@ -81,6 +91,7 @@ import com.milviv.presentation.rest.controllers.GoalController;
 import com.milviv.presentation.rest.controllers.HealthController;
 import com.milviv.presentation.rest.controllers.PlanController;
 import com.milviv.presentation.rest.controllers.PointsController;
+import com.milviv.presentation.rest.controllers.ReflectionController;
 import com.milviv.presentation.rest.controllers.RewardController;
 import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
@@ -110,6 +121,7 @@ public class Main {
                     .register(AppConfig.class, Scope.SINGLETON)
                     .register(AuthConfig.class, Scope.SINGLETON)
                     .register(CalendarConfig.class, Scope.SINGLETON)
+                    .register(ReflectionConfig.class, Scope.SINGLETON)
                     .register(DatabaseConnectionManager.class, Scope.SINGLETON)
                     .register(FlywayMigrationRunner.class, Scope.SINGLETON)
                     .register(JacksonConfig.class, Scope.SINGLETON);
@@ -155,7 +167,11 @@ public class Main {
                     .register(Logout.class)
                     .register(GetCurrentUser.class);
 
-            // Цели, проекты, задачи
+            // Цели, проекты, задачи, рефлексия
+            container.singletone(ReflectionQuestionRepository.class, new ReflectionQuestionJdbcRepository(connectionProvider));
+            container.singletone(TaskReflectionRepository.class, new TaskReflectionJdbcRepository(connectionProvider));
+            container.singletone(ReflectionAnswerRepository.class, new ReflectionAnswerJdbcRepository(connectionProvider));
+            container.singletone(ReflectionPolicy.class, container.get(ReflectionConfig.class).toPolicy());
             container.singletone(GoalRepository.class, new GoalJdbcRepository(connectionProvider));
             container.singletone(ProjectRepository.class, new ProjectJdbcRepository(connectionProvider));
             container.singletone(TaskRepository.class, new TaskJdbcRepository(connectionProvider));
@@ -169,6 +185,8 @@ public class Main {
                     .register(ProjectCommands.class)
                     .register(TaskCommands.class)
                     .register(CompleteTask.class)
+                    .register(ReflectionQuestionCommands.class)
+                    .register(TaskReflectionCommands.class)
                     .register(PlanCommands.class)
                     .register(CalendarQuery.class);
 
@@ -216,6 +234,7 @@ public class Main {
                     CalendarController.class,
                     RewardController.class,
                     PointsController.class,
+                    ReflectionController.class,
                     HealthController.class
             );
 
