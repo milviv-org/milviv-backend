@@ -28,6 +28,8 @@ import com.milviv.application.project.ProjectCommands;
 import com.milviv.application.reflection.ReflectionPolicy;
 import com.milviv.application.reflection.ReflectionQuestionCommands;
 import com.milviv.application.reflection.TaskReflectionCommands;
+import com.milviv.application.statistics.StatisticsPolicy;
+import com.milviv.application.statistics.StatisticsQueries;
 import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
@@ -42,12 +44,14 @@ import com.milviv.domain.project.ProjectRepository;
 import com.milviv.domain.reflection.ReflectionAnswerRepository;
 import com.milviv.domain.reflection.ReflectionQuestionRepository;
 import com.milviv.domain.reflection.TaskReflectionRepository;
+import com.milviv.domain.statistics.StatisticsRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.infrastructure.config.AppConfig;
 import com.milviv.infrastructure.config.AuthConfig;
 import com.milviv.infrastructure.config.CalendarConfig;
 import com.milviv.infrastructure.config.ReflectionConfig;
+import com.milviv.infrastructure.config.StatisticsConfig;
 import com.milviv.infrastructure.config.ConfigLoader;
 import com.milviv.infrastructure.config.ControllerRegistrar;
 import com.milviv.infrastructure.config.JacksonConfig;
@@ -72,6 +76,7 @@ import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ReflectionAnswerJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ReflectionQuestionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RewardJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.StatisticsJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
@@ -93,6 +98,7 @@ import com.milviv.presentation.rest.controllers.PlanController;
 import com.milviv.presentation.rest.controllers.PointsController;
 import com.milviv.presentation.rest.controllers.ReflectionController;
 import com.milviv.presentation.rest.controllers.RewardController;
+import com.milviv.presentation.rest.controllers.StatisticsController;
 import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
 import com.milviv.shared.validation.annotation.AnnotationValidator;
@@ -122,6 +128,7 @@ public class Main {
                     .register(AuthConfig.class, Scope.SINGLETON)
                     .register(CalendarConfig.class, Scope.SINGLETON)
                     .register(ReflectionConfig.class, Scope.SINGLETON)
+                    .register(StatisticsConfig.class, Scope.SINGLETON)
                     .register(DatabaseConnectionManager.class, Scope.SINGLETON)
                     .register(FlywayMigrationRunner.class, Scope.SINGLETON)
                     .register(JacksonConfig.class, Scope.SINGLETON);
@@ -199,6 +206,11 @@ public class Main {
                     .register(PointsQueries.class)
                     .register(SetHiddenRewardsPassword.class);
 
+            // Статистика
+            container.singletone(StatisticsRepository.class, new StatisticsJdbcRepository(connectionProvider));
+            container.singletone(StatisticsPolicy.class, container.get(StatisticsConfig.class).toPolicy());
+            container.register(StatisticsQueries.class);
+
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
             // ═══════════════════════════════════════════════════════════
@@ -235,6 +247,7 @@ public class Main {
                     RewardController.class,
                     PointsController.class,
                     ReflectionController.class,
+                    StatisticsController.class,
                     HealthController.class
             );
 

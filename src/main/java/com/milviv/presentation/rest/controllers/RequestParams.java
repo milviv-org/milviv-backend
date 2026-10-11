@@ -1,5 +1,7 @@
 package com.milviv.presentation.rest.controllers;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -45,6 +47,18 @@ final class RequestParams {
             return UUID.fromString(value);
         } catch (IllegalArgumentException ex) {
             throw new ValidationException(name, "Должен быть UUID");
+        }
+    }
+
+    static LocalDate requiredDateQuery(HttpContext ctx, String name) {
+        String value = ctx.pathQuery(name);
+        if (value == null || value.isBlank()) {
+            throw new ValidationException(name, "Обязательный параметр, формат YYYY-MM-DD");
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ex) {
+            throw new ValidationException(name, "Формат YYYY-MM-DD");
         }
     }
 
