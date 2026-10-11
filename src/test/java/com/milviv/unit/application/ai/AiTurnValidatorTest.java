@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import com.milviv.application.ai.AiLimits;
 import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.AiTurnValidator;
+import com.milviv.application.ai.HandleRegistry;
 import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.domain.ai.RefusalReason;
 
@@ -29,7 +30,7 @@ class AiTurnValidatorTest {
     private final AiTurnValidator validator = new AiTurnValidator(limits(4, Duration.ofSeconds(90), 20, 10), new AiPlanPolicy(limits(4, Duration.ofSeconds(90), 20, 10)));
 
     private java.util.List<String> validate(AiTurn turn) {
-        return validator.validate(turn, java.time.LocalDate.parse("2026-10-11")).violations();
+        return validator.validate(turn, java.time.LocalDate.parse("2026-10-11"), new HandleRegistry()).violations();
     }
 
     @Test

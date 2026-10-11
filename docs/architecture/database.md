@@ -257,8 +257,8 @@ Refresh-токены сессий входа. Хранится только хе
 | `idempotency_key` | VARCHAR(100) | Ключ повтора от клиента, уникален для пользователя |
 | `request_hash` | VARCHAR(64) | Хеш тела запроса: тот же ключ с другим телом — ошибка |
 | `message_length`, `message_hash` | INTEGER, VARCHAR(64) | Длина и хеш сообщения пользователя |
-| `handles` | JSONB | Дескрипторы, выданные AI: дескриптор → тип, id, версия |
-| `data_access_log` | JSONB | Что AI прочитал (тип запроса, количество), без содержимого |
+| `handles` | JSONB | Дескрипторы, выданные AI: `[{handle, type, id, version, deadline}]`; `deadline` — срок проекта при чтении |
+| `data_access_log` | JSONB | Что AI прочитал: `[{query, items, reason}]`, без содержимого. Пишется при любом итоге запроса |
 | `plan` | JSONB | Проверенный план операций |
 | `decision` | JSONB | Подтверждённые пользователем изменения и удаления |
 | `result` | JSONB | Отчёт об операциях: `[{itemId, result, type, id, title}]` |

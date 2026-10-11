@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import com.milviv.application.ai.AiAssistantPort;
 import com.milviv.application.ai.AiProviderException;
@@ -23,6 +24,12 @@ public class FakeAiAssistant implements AiAssistantPort {
     private Consumer<AiPrompt> beforeReply = prompt -> {};
 
     public FakeAiAssistant thenTurn(AiTurn turn) {
+        script.add(turn);
+        return this;
+    }
+
+    /** Ход, который зависит от присланного, — например, ссылается на выданный дескриптор. */
+    public FakeAiAssistant thenTurn(Function<AiPrompt, AiTurn> turn) {
         script.add(turn);
         return this;
     }
@@ -62,6 +69,11 @@ public class FakeAiAssistant implements AiAssistantPort {
         }
         if (next instanceof AiProviderException.Kind kind) {
             throw new AiProviderException(kind, "fake failure");
+        }
+        if (next instanceof Function<?, ?> function) {
+            @SuppressWarnings("unchecked")
+            Function<AiPrompt, AiTurn> dynamic = (Function<AiPrompt, AiTurn>) function;
+            return new AiReply(dynamic.apply(prompt), 10, 5);
         }
         return new AiReply((AiTurn) next, 10, 5);
     }

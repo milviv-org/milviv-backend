@@ -11,7 +11,7 @@
 | 9.1 | Согласие и конфиг | `ai_consents`, `GET/POST /ai/consent`, проверка согласия, `AiConfig` со всеми лимитами [§8](limits-and-security.md) | ✅ |
 | 9.2 | Каркас запроса | `AiRequest` (состояния, идемпотентность, один активный запрос), `AiAssistantPort` + `FakeAiAssistant`, `HandleAiRequest` для исходов `ANSWER` / `CLARIFICATION_NEEDED` / `REFUSED`, `POST /ai/requests`, `GET /ai/requests/{id}`, зависшие `PENDING_AI` | ✅ |
 | 9.3 | Создания | Создающая часть `PlanDraft`, `AiResponseValidator` + `AiPolicy`, `ExecuteAiPlan` (фаза 1 через ручные сценарии, одна транзакция), отчёт | ✅ |
-| 9.4 | Каталог данных | `AiDataCatalog` (6 запросов, проекции, урезание, без скрытых наград), `HandleRegistry` (дескрипторы с версией), цикл ≤ 2 раундов, журнал прочитанного, создание внутри существующих целей и проектов | ⏳ |
+| 9.4 | Каталог данных | `AiDataCatalog` (6 запросов, проекции, урезание, без скрытых наград), `HandleRegistry` (дескрипторы с версией), цикл ≤ 2 раундов, журнал прочитанного, создание внутри существующих целей и проектов | ✅ |
 | 9.5 | Изменения и удаления | Изменения и удаления в плане, `PreviewBuilder`, `PROPOSED`, `POST /ai/requests/{id}/execution` и `/rejection`, сверка версий (`TARGET_CHANGED`), правила дат на итоговом состоянии, TTL | ⏳ |
 | 9.6 | Адаптер Gemini | Провайдерские ключи `AiConfig`, JDK `HttpClient`, промпт `assistant@1`, схема ответа, строгий разбор, таймауты, ретраи, `AiFailure`; тесты на HTTP-заглушке; онлайн-прогон ~25 сообщений (п. 10 [§17](README.md#17-final-architecture)) | ⏳ |
 | 9.7 | Квоты и предохранитель | Лимиты на пользователя (сутки, минута, созданий в сутки), предохранитель квоты провайдера | ⏳ |
@@ -547,3 +547,203 @@ sequenceDiagram
   - ошибка домена на последнем узле → **ничего не создано**, `FAILED BUSINESS_RULE_VIOLATION`;
   - созданное принадлежит только этому пользователю.
 - `HttpStatusResolver`: новые коды.
+
+---
+
+## 9.4 Каталог данных ✅
+
+**Задача.** AI сам просит данные пользователя из закрытого каталога [Р G-7]. Сервер исполняет только каталожные запросы, только с `user_id` из сессии, **без скрытых наград** (G-5), и вместо ID выдаёт дескрипторы (принцип 8). С дескрипторами AI может создавать внутри **существующих** целей и проектов.
+
+**В подэтап не входит:** изменения и удаления по дескрипторам — 9.5; `ref` — 9.5.
+
+### Классы
+
+| Класс | Слой | Ответственность |
+|-------|------|-----------------|
+| `AiTurn.DataRequest` | application/ai/contract | Исход: `dataRequestReason` (≤ 200), `dataRequests[]` (1..3) |
+| `DataQuery` | application/ai/contract | sealed: `ListGoals`, `ListProjects(goal?, status?)`, `ListTasks(project?, goal?, unassigned?, status?, period?)`, `ListRewards`, `ListPlans(period)`, `ListReflections(task?, period?)` |
+| `DataItem` | application/ai/contract | sealed-проекции: `GoalItem`, `ProjectItem`, `TaskItem`, `RewardItem`, `PlanItem`, `ReflectionItem` — без ID, только дескрипторы |
+| `DataRound` | application/ai/contract | Один раунд: запрос AI → `DataResult[]` + `RejectedRequest[]` |
+| `AiDataCatalog` | application/ai | Проверяет и исполняет запросы через те же репозитории, что ручной API; проекция, урезание, лимит элементов и токенов |
+| `HandleRegistry` | application/ai | На один AI-запрос: дескриптор ↔ (тип, ID, версия, срок проекта). Один и тот же объект — один дескриптор |
+| `AiPlanPolicy` | application/ai | + `existing` у цели и проекта: дескриптор выдан, тип подходит; срок новой задачи ≤ срока существующего проекта |
+| `ExecuteAiPlan` | application/ai | + создание внутри существующей цели или проекта: дескриптор → ID |
+| `HandleAiRequest` | application/ai | + цикл: `DataRequest` → каталог → следующий вызов с данными; ≤ `maxRounds` раундов |
+| `AiHandle`, `DataAccess` | domain/ai | Хранимое: дескриптор (тип, ID, версия) и журнал прочитанного (запрос, количество, причина) |
+| `AiRequest` | domain/ai | + `handles`, `dataAccessLog`, `dataRounds` |
+| `TaskFilter` | domain/task | + `unassigned`, период |
+| `ReflectionAnswerRepository` | domain/reflection | + `findForAi(userId, taskId?, from?, to?, limit)` |
+
+### Схема связей
+
+```mermaid
+classDiagram
+    direction LR
+
+    class HandleAiRequest {
+        +execute(userId, key, message) Result
+    }
+    class AiAssistantPort {
+        <<interface>>
+        +nextTurn(prompt) AiReply
+    }
+    class AiTurn {
+        <<sealed>>
+    }
+    class DataRequest {
+        dataRequestReason
+        dataRequests
+    }
+    class DataQuery {
+        <<sealed>>
+    }
+    class AiDataCatalog {
+        +execute(userId, request, registry) DataRound
+    }
+    class HandleRegistry {
+        +issue(type, id, version) String
+        +resolve(handle, type) Entry
+        +snapshot() List~AiHandle~
+    }
+    class DataRound {
+        <<record>>
+        results
+        rejected
+    }
+    class DataItem {
+        <<sealed>>
+    }
+    class AiPlanPolicy {
+        +check(plan, today, registry) Verdict
+    }
+    class ExecuteAiPlan {
+        +executeCreations(userId, create, registry) OperationReport
+    }
+    class GoalRepository {
+        <<interface>>
+    }
+    class ProjectRepository {
+        <<interface>>
+    }
+    class TaskRepository {
+        <<interface>>
+    }
+    class RewardRepository {
+        <<interface>>
+    }
+    class PlanRepository {
+        <<interface>>
+    }
+    class ReflectionAnswerRepository {
+        <<interface>>
+    }
+    class AiRequest {
+        handles
+        dataAccessLog
+        dataRounds
+    }
+
+    HandleAiRequest --> AiAssistantPort
+    HandleAiRequest --> AiDataCatalog
+    HandleAiRequest --> AiPlanPolicy
+    HandleAiRequest --> ExecuteAiPlan
+    HandleAiRequest ..> HandleRegistry : одна на запрос
+    HandleAiRequest ..> AiRequest : handles, журнал
+    DataRequest --|> AiTurn
+    DataRequest --> DataQuery
+    AiDataCatalog --> HandleRegistry : выдаёт дескрипторы
+    AiDataCatalog ..> DataRound : строит
+    DataRound --> DataItem
+    AiDataCatalog --> GoalRepository
+    AiDataCatalog --> ProjectRepository
+    AiDataCatalog --> TaskRepository
+    AiDataCatalog --> RewardRepository : только нескрытые
+    AiDataCatalog --> PlanRepository
+    AiDataCatalog --> ReflectionAnswerRepository
+    AiPlanPolicy --> HandleRegistry : existing
+    ExecuteAiPlan --> HandleRegistry : дескриптор в ID
+```
+
+### Как работает
+
+```mermaid
+sequenceDiagram
+    participant H as HandleAiRequest
+    participant P as AiAssistantPort
+    participant C as AiDataCatalog
+    participant R as HandleRegistry
+    participant DB as Database
+
+    H->>P: вызов 1 (сообщение, каталог)
+    P-->>H: DataRequest LIST_PROJECTS, LIST_TASKS(project p_2mZa)
+    H->>C: исполнить раунд 1
+    C->>R: p_2mZa есть, это проект?
+    C->>DB: SELECT … WHERE user_id = ? (read-only)
+    C->>R: выдать дескрипторы найденному (версия, срок)
+    C-->>H: DataRound: результаты + отклонённые
+    H->>P: вызов 2 (+ все раунды данных)
+    P-->>H: Proposal: задачи в существующий p_2mZa
+    H->>DB: tx: создания, EXECUTED, handles, журнал
+```
+
+**Каталог v1** ([§6.3](contract.md)):
+
+| Запрос | Параметры | Проекция (без ID) | Дескриптор |
+|--------|-----------|-------------------|------------|
+| `LIST_GOALS` | — | название, описание | `g_*` |
+| `LIST_PROJECTS` | `goal?`, `status?` | название, описание, статус, срок, цель | `p_*` |
+| `LIST_TASKS` | `project?`, `goal?`, `unassigned?`, `status?`, `period?` | название, описание, статус, сложность, баллы, начало, срок, дата выполнения, проект, цель | `t_*` |
+| `LIST_REWARDS` | — | название, описание, стоимость — только нескрытые | `r_*` |
+| `LIST_PLANS` | `period` (обязателен, ≤ 31 дня) | дата или дни недели, время, название, задача | — |
+| `LIST_REFLECTIONS` | `task?`, `period?` | задача, дата ответа, вопрос, ответ | — |
+
+**Правила:**
+- **Скрытые награды** отсекаются в SQL (`includeHidden = false`): не влияют ни на элементы, ни на количество, ни на `truncated`.
+- **Размер:** ≤ 100 элементов на запрос (берётся 101-й, чтобы честно выставить `truncated`); описания и ответы рефлексии урезаются до 1000 символов; всего данных за AI-запрос ≤ 16 000 токенов — оценка «символы JSON / 4»; не влезло → `truncated`.
+- **Отклонённый запрос** (неизвестный дескриптор, не тот тип, нет периода у `LIST_PLANS`, период > 31 дня или `from > to`) попадает в `rejectedRequests` с кодом; остальные запросы раунда исполняются ([§6.3](contract.md)).
+- **Нарушение контракта** (0 или > 3 запросов, нет причины, длинная причина, `DataRequest` после исчерпания раундов) — неверный ход: один повтор с замечаниями.
+- **Раунды:** ≤ 2. Раунд данных — не «повтор»: он не расходует шанс на исправление, но каждый вызов считается в `maxCallsPerRequest` (4).
+- **Чтение** — в транзакции только для чтения, вне транзакции записи; вызов AI — вне транзакций (инвариант 9).
+- **Журнал прочитанного** (запрос, количество, причина) и **дескрипторы** записываются в `ai_requests` в транзакции 3; клиент видит журнал как `dataAccessed` ([§6.6](user-flow.md)).
+
+**Создание в существующем** ([§6.5](contract.md)):
+- `create.goal.existing = g_*` → проекты и задачи цели создаются в существующей цели; `title`, `description` должны быть `null`;
+- `create.projects[].existing = p_*` → задачи создаются в существующем проекте; `title`, `description`, `deadline` — `null`;
+- существующая цель или проект не попадают в отчёт и не считаются в лимит созданий;
+- срок новой задачи ≤ срока существующего проекта — проверяется по сроку, запомненному при чтении, и ещё раз в домене при исполнении.
+
+### Решения на подтверждение
+
+1. **`LIST_TASKS(period)`** — задачи, у которых срок **или** дата выполнения попадают в период. В концепции смысл периода не задан.
+2. **`LIST_REFLECTIONS`: «дата ответа», а не «дата выполнения»**, как в концепции. Ответ даётся после выполнения, а дата выполнения в репозитории ответов не читается — потребовался бы ещё один JOIN ради почти той же даты.
+3. **`LIST_PLANS`: у плана с задачей выдаётся дескриптор задачи** — каталог дочитывает эти задачи (с версией), чтобы AI мог ссылаться на них дальше.
+4. **`existing` у проекта — только в `create.projects`**, не внутри `create.goal.projects`. Положить существующий проект в цель — это изменение проекта, оно требует согласия (9.5).
+5. **Дескрипторы и журнал записываются уже сейчас** (`handles`, `data_access_log`, `data_rounds` из V14), хотя для созданий хватило бы памяти: в 9.5 они нужны для исполнения после подтверждения.
+6. **Причина запроса данных хранится в журнале** и показывается клиенту в `dataAccessed`: концепция требует показывать её пользователю ([§6.2](contract.md)).
+7. **Новые фильтры — в существующих репозиториях** (`TaskFilter`, `ReflectionAnswerRepository`), а не в отдельном «AI-репозитории» (принцип 5).
+8. **Оценка токенов «символы / 4»** — грубая, но не зависит от провайдера. Точный подсчёт был бы привязан к токенизатору Gemini.
+
+### Сверка с кодом (после реализации)
+
+- Классы, связи и последовательность — как в схемах. Решения 1–8 приняты. Миграций нет: `handles`, `data_access_log`, `data_rounds` — из V14.
+- **Неизвестный дескриптор и дескриптор не того типа — один код `UNKNOWN_HANDLE`.** Для AI это одна и та же ошибка: такого дескриптора нужного типа ему не выдавали.
+- **Токены оцениваются по `toString()` проекции, а не по JSON:** слой `application` не зависит от Jackson. Порядок величины тот же.
+- **Связанные цели, проекты, задачи дочитываются** (`findById` с `user_id`), чтобы у их дескрипторов была версия, — не только у плана (решение 3), но и у проекта и цели задачи, цели проекта, задачи ответа рефлексии.
+- **Журнал и дескрипторы пишутся при любом итоге**, в том числе `FAILED`: данные провайдеру уже ушли ([§13](data.md)).
+- **`HandleRegistry` восстанавливается из сохранённого списка** — для исполнения после подтверждения в 9.5.
+- **`FakeAiAssistant`** умеет ход, построенный по присланному запросу: дескрипторы случайны, и тестовый «AI» берёт их из полученных данных — как настоящий.
+
+### Тесты
+
+- `HandleRegistry`: формат `g_xxxx`, уникальность, один объект — один дескриптор, неверный тип → нет.
+- `AiDataCatalog` на H2:
+  - каждый запрос: проекция, фильтры, дескрипторы с версией;
+  - **изоляция**: данные второго пользователя с похожими названиями не видны;
+  - **скрытая награда**: нет в элементах, в количестве, `truncated` не выставлен из-за неё;
+  - урезание текстов; > 100 элементов → `truncated`; бюджет токенов;
+  - отклонения: чужой или несуществующий дескриптор, не тот тип, `LIST_PLANS` без периода и с периодом > 31 дня.
+- `AiPlanPolicy`: `existing` с неизвестным дескриптором, не того типа, с заполненным `title`; existing-проект внутри цели; срок задачи позже срока существующего проекта.
+- `HandleAiRequest` + `FakeAiAssistant`:
+  - `DataRequest` → данные попадают в следующий вызов → `Proposal` в существующий проект → задачи там, в отчёте только новые;
+  - 3-й `DataRequest` → замечание → ответ; журнал и дескрипторы в БД; `dataAccessed` в ответе;
+  - лимит вызовов при раундах данных.

@@ -78,7 +78,7 @@ final class H2WorkSchema {
                 contract_version VARCHAR(30) NOT NULL, prompt_version VARCHAR(50) NOT NULL,
                 provider VARCHAR(30) NOT NULL, model VARCHAR(100) NOT NULL, ai_calls INTEGER NOT NULL DEFAULT 0,
                 data_rounds INTEGER NOT NULL DEFAULT 0, input_tokens INTEGER, output_tokens INTEGER, latency_ms INTEGER,
-                result JSONB,
+                result JSONB, handles JSONB, data_access_log JSONB,
                 version BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMP, expires_at TIMESTAMP, executed_at TIMESTAMP,
                 UNIQUE (user_id, idempotency_key))""");
         st.execute("""

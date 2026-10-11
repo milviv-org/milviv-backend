@@ -19,6 +19,7 @@ import com.milviv.application.task.TaskCommands;
 import com.milviv.application.task.TaskView;
 import com.milviv.application.transaction.Propagation;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.domain.ai.AiHandle;
 import com.milviv.domain.ai.OperationReport;
 import com.milviv.domain.ai.OperationReport.EntityType;
 import com.milviv.domain.ai.OperationReport.Item;
@@ -56,19 +57,28 @@ public class ExecuteAiPlan {
     /**
      * Порядок: цель → её проекты → их задачи → задачи цели → проекты без цели → их задачи →
      * задачи без проекта → награды. Родитель всегда создан раньше детей.
+     *
+     * Существующая цель или проект (existing) не создаются и не попадают в отчёт: дескриптор → ID
+     * через реестр. Сущность могли удалить после чтения — тогда сценарий бросит ошибку домена.
      */
-    public OperationReport executeCreations(UUID userId, PlanDraft.Create create) {
+    public OperationReport executeCreations(UUID userId, PlanDraft.Create create, HandleRegistry registry) {
         // MANDATORY: без внешней транзакции частичное создание было бы возможно
         return transactionManager.execute(Propagation.MANDATORY, () -> {
             List<Item> report = new ArrayList<>();
             GoalNode goalNode = create.goal();
             if (goalNode != null) {
-                GoalView goal = goals.create(userId, new GoalDetails(goalNode.title(), goalNode.description()));
-                report.add(new Item("g1", Result.CREATED, EntityType.GOAL, goal.id(), goal.title()));
-                createProjects(userId, "g1.p", list(goalNode.projects()), goal.id(), report);
-                createTasks(userId, "g1.t", list(goalNode.tasks()), null, goal.id(), report);
+                UUID goalId;
+                if (goalNode.existing() != null) {
+                    goalId = id(registry, goalNode.existing(), EntityType.GOAL);
+                } else {
+                    GoalView goal = goals.create(userId, new GoalDetails(goalNode.title(), goalNode.description()));
+                    report.add(new Item("g1", Result.CREATED, EntityType.GOAL, goal.id(), goal.title()));
+                    goalId = goal.id();
+                }
+                createProjects(userId, "g1.p", list(goalNode.projects()), goalId, registry, report);
+                createTasks(userId, "g1.t", list(goalNode.tasks()), null, goalId, report);
             }
-            createProjects(userId, "p", list(create.projects()), null, report);
+            createProjects(userId, "p", list(create.projects()), null, registry, report);
             createTasks(userId, "t", list(create.tasks()), null, null, report);
 
             List<RewardNode> rewardNodes = list(create.rewards());
@@ -82,15 +92,28 @@ public class ExecuteAiPlan {
         });
     }
 
-    private void createProjects(UUID userId, String prefix, List<ProjectNode> nodes, UUID goalId, List<Item> report) {
+    private void createProjects(UUID userId, String prefix, List<ProjectNode> nodes, UUID goalId,
+                                HandleRegistry registry, List<Item> report) {
         for (int i = 0; i < nodes.size(); i++) {
             ProjectNode node = nodes.get(i);
             String itemId = prefix + (i + 1);
-            ProjectView project = projects.create(userId,
-                    new ProjectDetails(goalId, node.title(), node.description(), node.deadline()));
-            report.add(new Item(itemId, Result.CREATED, EntityType.PROJECT, project.id(), project.title()));
-            createTasks(userId, itemId + ".t", list(node.tasks()), project.id(), null, report);
+            UUID projectId;
+            if (node.existing() != null) {
+                projectId = id(registry, node.existing(), EntityType.PROJECT);
+            } else {
+                ProjectView project = projects.create(userId,
+                        new ProjectDetails(goalId, node.title(), node.description(), node.deadline()));
+                report.add(new Item(itemId, Result.CREATED, EntityType.PROJECT, project.id(), project.title()));
+                projectId = project.id();
+            }
+            createTasks(userId, itemId + ".t", list(node.tasks()), projectId, null, report);
         }
+    }
+
+    /** План уже прошёл AiPlanPolicy: неизвестный дескриптор здесь — ошибка программы. */
+    private static UUID id(HandleRegistry registry, String handle, EntityType type) {
+        return registry.resolve(handle, type).map(AiHandle::id)
+                .orElseThrow(() -> new IllegalStateException("Unresolved handle " + handle));
     }
 
     private void createTasks(UUID userId, String prefix, List<TaskNode> nodes, UUID projectId, UUID goalId,

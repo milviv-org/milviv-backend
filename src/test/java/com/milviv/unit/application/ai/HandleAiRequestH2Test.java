@@ -84,7 +84,8 @@ class HandleAiRequestH2Test {
     private HandleAiRequest handler(FakeAiAssistant ai, int maxCalls) {
         var limits = AiTurnValidatorTest.limits(maxCalls, Duration.ofSeconds(90));
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
-                AiCreationsH2Test.executeAiPlan(connections, tx, clock), new AiRequestJdbcRepository(connections, MAPPER),
+                AiCreationsH2Test.executeAiPlan(connections, tx, clock), AiCreationsH2Test.catalog(connections, limits, tx),
+                new AiRequestJdbcRepository(connections, MAPPER),
                 limits, tx, clock);
     }
 

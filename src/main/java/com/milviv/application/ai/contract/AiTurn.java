@@ -1,12 +1,14 @@
 package com.milviv.application.ai.contract;
 
+import java.util.List;
+
 import com.milviv.domain.ai.RefusalReason;
 
 /**
  * Ход AI по контракту assistant.v1 (§6.2). НЕДОВЕРЕННЫЕ данные: перед использованием —
  * только через AiTurnValidator. Провайдерские типы сюда не попадают (инвариант 9).
  *
- * В 9.4 добавится DataRequest.
+ * DataRequest — просьба, не команда: сервер решает, что отдать (принцип 1).
  */
 public sealed interface AiTurn {
 
@@ -25,4 +27,11 @@ public sealed interface AiTurn {
      * @param answer  текст рядом с операциями, например результат анализа (G-21); может быть null
      */
     record Proposal(String summary, String answer, PlanDraft plan) implements AiTurn {}
+
+    /**
+     * Явный запрос данных из каталога (G-7, §6.3).
+     *
+     * @param dataRequestReason зачем — показывается пользователю
+     */
+    record DataRequest(String dataRequestReason, List<DataQuery> dataRequests) implements AiTurn {}
 }

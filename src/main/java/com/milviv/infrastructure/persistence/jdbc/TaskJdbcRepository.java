@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -77,6 +78,8 @@ public class TaskJdbcRepository implements TaskRepository {
                 + (filter.status() != null ? " AND status = ?" : "")
                 + (filter.projectId() != null ? " AND project_id = ?" : "")
                 + (filter.goalId() != null ? " AND goal_id = ?" : "")
+                + (filter.unassigned() ? " AND project_id IS NULL AND goal_id IS NULL" : "")
+                + (filter.hasPeriod() ? " AND (deadline BETWEEN ? AND ? OR (completed_at >= ? AND completed_at < ?))" : "")
                 + " ORDER BY created_at DESC, id LIMIT ? OFFSET ?";
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
             int i = 1;
@@ -89,6 +92,12 @@ public class TaskJdbcRepository implements TaskRepository {
             }
             if (filter.goalId() != null) {
                 ps.setObject(i++, filter.goalId());
+            }
+            if (filter.hasPeriod()) {
+                ps.setObject(i++, filter.from());
+                ps.setObject(i++, filter.to());
+                ps.setTimestamp(i++, Timestamp.from(filter.from().atStartOfDay().toInstant(ZoneOffset.UTC)));
+                ps.setTimestamp(i++, Timestamp.from(filter.to().plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)));
             }
             ps.setInt(i++, limit);
             ps.setInt(i, offset);

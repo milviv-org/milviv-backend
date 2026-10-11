@@ -18,6 +18,7 @@ import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
 import com.milviv.application.ai.AiAssistantPort;
 import com.milviv.application.ai.AiConsentService;
+import com.milviv.application.ai.AiDataCatalog;
 import com.milviv.application.ai.AiLimits;
 import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.ExecuteAiPlan;
@@ -247,6 +248,7 @@ public class Main {
                     .register(AiPlanPolicy.class)
                     .register(AiTurnValidator.class)
                     .register(ExecuteAiPlan.class)
+                    .register(AiDataCatalog.class)
                     .register(HandleAiRequest.class);
 
             // ═══════════════════════════════════════════════════════════

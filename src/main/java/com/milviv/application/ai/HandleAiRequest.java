@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -16,11 +17,13 @@ import java.util.regex.Pattern;
 import com.milviv.application.ai.AiAssistantPort.AiPrompt;
 import com.milviv.application.ai.AiAssistantPort.AiReply;
 import com.milviv.application.ai.contract.AiTurn;
+import com.milviv.application.ai.contract.DataRound;
 import com.milviv.application.transaction.Propagation;
 import com.milviv.application.transaction.TransactionManager;
 import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
+import com.milviv.domain.ai.DataAccess;
 import com.milviv.domain.ai.OperationReport;
 import com.milviv.domain.ai.RefusalReason;
 import com.milviv.domain.exception.AiRequestException;
@@ -37,8 +40,8 @@ import com.milviv.domain.exception.ValidationException;
  * 2. вызовы AI — вне транзакции (AD-08, инвариант 9);
  * 3. tx: итог записывается, только если запрос всё ещё PENDING_AI.
  *
- * AI отвечает, уточняет, отказывается или предлагает создания — они исполняются сразу,
- * в транзакции 3 (G-25). Запросы данных — 9.4, изменения и удаления — 9.5.
+ * AI запрашивает данные из каталога (≤ maxRounds раундов), затем отвечает, уточняет, отказывается
+ * или предлагает создания — они исполняются сразу, в транзакции 3 (G-25). Изменения и удаления — 9.5.
  */
 public class HandleAiRequest {
 
@@ -54,18 +57,20 @@ public class HandleAiRequest {
     private final AiAssistantPort assistant;
     private final AiTurnValidator validator;
     private final ExecuteAiPlan executeAiPlan;
+    private final AiDataCatalog catalog;
     private final AiRequestRepository requests;
     private final AiLimits limits;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public HandleAiRequest(AiConsentService consentService, AiAssistantPort assistant, AiTurnValidator validator,
-                           ExecuteAiPlan executeAiPlan, AiRequestRepository requests, AiLimits limits,
-                           TransactionManager transactionManager, Clock clock) {
+                           ExecuteAiPlan executeAiPlan, AiDataCatalog catalog, AiRequestRepository requests,
+                           AiLimits limits, TransactionManager transactionManager, Clock clock) {
         this.consentService = consentService;
         this.assistant = assistant;
         this.validator = validator;
         this.executeAiPlan = executeAiPlan;
+        this.catalog = catalog;
         this.requests = requests;
         this.limits = limits;
         this.transactionManager = transactionManager;
@@ -75,8 +80,20 @@ public class HandleAiRequest {
     /** @param created false — повтор с тем же ключом, ответ взят из сохранённого запроса */
     public record Result(AiRequestView request, boolean created) {}
 
+    /** Что накопилось за разговор с AI: дескрипторы, раунды данных, журнал прочитанного. */
+    private static final class Conversation {
+        final HandleRegistry registry = new HandleRegistry();
+        final List<DataRound> rounds = new ArrayList<>();
+        final List<DataAccess> accessLog = new ArrayList<>();
+        final AiDataCatalog.Budget budget;
+
+        Conversation(int tokens) {
+            this.budget = new AiDataCatalog.Budget(tokens);
+        }
+    }
+
     /** Итог разговора с AI, который запишется в транзакции 3. */
-    private record Outcome(AiTurn turn, Code failure, AiRequest.Usage usage) {}
+    private record Outcome(AiTurn turn, Code failure, AiRequest.Usage usage, Conversation conversation) {}
 
     /** Ход 1: либо новый запрос, либо уже существующий (повтор). */
     private record Start(AiRequest request, boolean replay) {}
@@ -106,14 +123,14 @@ public class HandleAiRequest {
             return result(start.request(), false);
         }
 
-        Outcome outcome = converse(message, startedAt);
+        Outcome outcome = converse(userId, message, startedAt);
         UUID requestId = start.request().getId();
         AiRequest finished;
         try {
             finished = transactionManager.execute(() -> finish(userId, requestId, outcome));
         } catch (DomainException ex) {
             // правило домена нарушено при исполнении: созданное откатилось вместе с транзакцией (§10.1)
-            finished = transactionManager.execute(() -> fail(userId, requestId, Code.BUSINESS_RULE_VIOLATION, outcome.usage()));
+            finished = transactionManager.execute(() -> fail(userId, requestId, Code.BUSINESS_RULE_VIOLATION, outcome));
         }
         return result(finished, true);
     }
@@ -179,8 +196,9 @@ public class HandleAiRequest {
 
     // ─── Вызовы AI, вне транзакции ────────────────────────────────────────────
 
-    private Outcome converse(String message, Instant startedAt) {
+    private Outcome converse(UUID userId, String message, Instant startedAt) {
         Duration timeout = limits.request().requestTimeout();
+        Conversation conversation = new Conversation(limits.data().maxTokens());
         LocalDate today = LocalDate.ofInstant(startedAt, ZoneOffset.UTC);
         Tokens tokens = new Tokens();
         List<String> violations = List.of();
@@ -190,25 +208,26 @@ public class HandleAiRequest {
         while (true) {
             Duration timeLeft = timeout.minus(Duration.between(startedAt, clock.instant()));
             if (timeLeft.isNegative() || timeLeft.isZero()) {
-                return failure(Code.AI_TIMEOUT, calls, tokens, startedAt);
+                return failure(Code.AI_TIMEOUT, calls, tokens, startedAt, conversation);
             }
             if (calls >= limits.request().maxCallsPerRequest()) {
-                return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt);
+                return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt, conversation);
             }
 
             AiReply reply;
             calls++;
             try {
                 reply = assistant.nextTurn(new AiPrompt(AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION,
-                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, limits.plan()));
+                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, limits.plan(),
+                        List.copyOf(conversation.rounds)));
             } catch (AiProviderException ex) {
                 switch (ex.getKind()) {
-                    case UNAVAILABLE -> { return failure(Code.AI_PROVIDER_UNAVAILABLE, calls, tokens, startedAt); }
-                    case TIMEOUT -> { return failure(Code.AI_TIMEOUT, calls, tokens, startedAt); }
+                    case UNAVAILABLE -> { return failure(Code.AI_PROVIDER_UNAVAILABLE, calls, tokens, startedAt, conversation); }
+                    case TIMEOUT -> { return failure(Code.AI_TIMEOUT, calls, tokens, startedAt, conversation); }
                     case MALFORMED -> {
                         // неразобранный ответ — тот же неверный ход: один шанс исправиться
                         if (repaired) {
-                            return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt);
+                            return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt, conversation);
                         }
                         repaired = true;
                         violations = List.of("response: MALFORMED");
@@ -220,30 +239,44 @@ public class HandleAiRequest {
             tokens.add(reply);
 
             if (Duration.between(startedAt, clock.instant()).compareTo(timeout) > 0) {
-                return failure(Code.AI_TIMEOUT, calls, tokens, startedAt);
+                return failure(Code.AI_TIMEOUT, calls, tokens, startedAt, conversation);
             }
 
             AiTurn turn = validator.normalize(reply.turn());
-            AiPlanPolicy.Verdict verdict = validator.validate(turn, today);
+            AiPlanPolicy.Verdict verdict = validator.validate(turn, today, conversation.registry);
+            // исчерпав раунды, AI обязан вернуть не DataRequest (§6.3)
+            if (verdict.ok() && turn instanceof AiTurn.DataRequest && conversation.rounds.size() >= limits.data().maxRounds()) {
+                verdict = new AiPlanPolicy.Verdict(List.of("outcome: DATA_ROUNDS_EXHAUSTED"), false);
+            }
+            if (verdict.ok() && turn instanceof AiTurn.DataRequest request) {
+                // раунд данных — не исправление: шанс на повтор не тратится, вызов — тратится
+                DataRound round = catalog.execute(userId, conversation.rounds.size() + 1, request,
+                        conversation.registry, conversation.budget);
+                conversation.rounds.add(round);
+                round.results().forEach(result ->
+                        conversation.accessLog.add(new DataAccess(result.query(), result.items().size(), round.reason())));
+                violations = List.of();
+                continue;
+            }
             if (verdict.ok()) {
-                return new Outcome(turn, null, tokens.usage(calls, startedAt, clock.instant()));
+                return new Outcome(turn, null, tokens.usage(calls, startedAt, clock.instant()), conversation);
             }
             // слишком большой план не исправляется повтором — AI молча выбросил бы часть операций
             if (verdict.tooLarge()) {
-                return failure(Code.AI_PLAN_TOO_LARGE, calls, tokens, startedAt);
+                return failure(Code.AI_PLAN_TOO_LARGE, calls, tokens, startedAt, conversation);
             }
             List<String> found = verdict.violations();
             // один повтор с замечаниями; снова неверно → AI_INVALID_RESPONSE (§7.1)
             if (repaired) {
-                return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt);
+                return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt, conversation);
             }
             repaired = true;
             violations = found;
         }
     }
 
-    private Outcome failure(Code code, int calls, Tokens tokens, Instant startedAt) {
-        return new Outcome(null, code, tokens.usage(calls, startedAt, clock.instant()));
+    private Outcome failure(Code code, int calls, Tokens tokens, Instant startedAt, Conversation conversation) {
+        return new Outcome(null, code, tokens.usage(calls, startedAt, clock.instant()), conversation);
     }
 
     /** Сумма токенов по вызовам; null, если провайдер ни разу их не сообщил. */
@@ -276,6 +309,7 @@ public class HandleAiRequest {
         if (!request.isPending()) {
             return request;
         }
+        recordDataAccess(request, outcome.conversation());
         if (outcome.failure() != null) {
             request.failed(outcome.failure(), outcome.usage());
         } else {
@@ -283,8 +317,10 @@ public class HandleAiRequest {
                 case AiTurn.Answer a -> request.answered(a.answer(), outcome.usage());
                 case AiTurn.ClarificationNeeded c -> request.clarificationNeeded(c.clarificationQuestion(), outcome.usage());
                 case AiTurn.Refused r -> request.refused(r.refusalReason(), outcome.usage());
+                case AiTurn.DataRequest d -> throw new IllegalStateException("DataRequest is handled in converse");
                 case AiTurn.Proposal p -> {
-                    OperationReport report = executeAiPlan.executeCreations(userId, p.plan().create());
+                    OperationReport report = executeAiPlan.executeCreations(userId, p.plan().create(),
+                            outcome.conversation().registry);
                     request.executed(p.summary(), p.answer(), report, outcome.usage(), clock.instant());
                 }
             }
@@ -293,13 +329,19 @@ public class HandleAiRequest {
         return request;
     }
 
-    private AiRequest fail(UUID userId, UUID requestId, Code code, AiRequest.Usage usage) {
+    private AiRequest fail(UUID userId, UUID requestId, Code code, Outcome outcome) {
         AiRequest request = requests.findById(userId, requestId).orElseThrow();
         if (request.isPending()) {
-            request.failed(code, usage);
+            recordDataAccess(request, outcome.conversation());
+            request.failed(code, outcome.usage());
             requests.update(request);
         }
         return request;
+    }
+
+    /** Журнал и дескрипторы пишутся при любом итоге: данные провайдеру уже ушли (§13). */
+    private static void recordDataAccess(AiRequest request, Conversation conversation) {
+        request.recordDataAccess(conversation.registry.snapshot(), conversation.accessLog, conversation.rounds.size());
     }
 
     // ─── Ответ ────────────────────────────────────────────────────────────────

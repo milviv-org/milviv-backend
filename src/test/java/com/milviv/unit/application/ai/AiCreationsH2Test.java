@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.milviv.application.ai.AiConsentService;
+import com.milviv.application.ai.AiDataCatalog;
 import com.milviv.application.ai.AiLimits;
 import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.AiTurnValidator;
@@ -49,6 +50,8 @@ import com.milviv.infrastructure.persistence.jdbc.AiConsentJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.AiRequestJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.ReflectionAnswerJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RewardJdbcRepository;
@@ -93,6 +96,13 @@ class AiCreationsH2Test {
                 tx);
     }
 
+    /** Каталог на настоящих репозиториях — так же, как в Main. */
+    static AiDataCatalog catalog(TransactionalConnectionProvider connections, AiLimits limits, TransactionManager tx) {
+        return new AiDataCatalog(new GoalJdbcRepository(connections), new ProjectJdbcRepository(connections),
+                new TaskJdbcRepository(connections), new RewardJdbcRepository(connections),
+                new PlanJdbcRepository(connections), new ReflectionAnswerJdbcRepository(connections), limits, tx);
+    }
+
     @BeforeEach
     void setUp() throws SQLException {
         JdbcDataSource dataSource = new JdbcDataSource();
@@ -116,7 +126,8 @@ class AiCreationsH2Test {
 
     private HandleAiRequest handler(FakeAiAssistant ai, AiLimits limits) {
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
-                executeAiPlan(connections, tx, clock), new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER),
+                executeAiPlan(connections, tx, clock), catalog(connections, limits, tx),
+                new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER),
                 limits, tx, clock);
     }
 
@@ -134,10 +145,10 @@ class AiCreationsH2Test {
 
     private static Create englishGoal() {
         return new Create(
-                new GoalNode("Выучить английский", "B2",
-                        List.of(new ProjectNode("Грамматика", null, null, List.of(task("Времена Simple", Difficulty.EXPERT, null)))),
+                new GoalNode(null, "Выучить английский", "B2",
+                        List.of(new ProjectNode(null, "Грамматика", null, null, List.of(task("Времена Simple", Difficulty.EXPERT, null)))),
                         List.of(task("Найти репетитора", Difficulty.NOVICE, 7))),
-                List.of(new ProjectNode("Чтение", null, null, List.of())),
+                List.of(new ProjectNode(null, "Чтение", null, null, List.of())),
                 List.of(task("Купить словарь", Difficulty.APPRENTICE, null)),
                 List.of(new RewardNode("Кино", null, 500)));
     }
@@ -236,5 +247,80 @@ class AiCreationsH2Test {
             rs.next();
             return rs.getInt(1);
         }
+    }
+
+    // ─── Каталог данных и existing (9.4) ──────────────────────────────────────
+
+    private static String projectHandle(com.milviv.application.ai.AiAssistantPort.AiPrompt prompt) {
+        return prompt.rounds().getLast().results().getFirst().items().stream()
+                .map(item -> (com.milviv.application.ai.contract.DataRound.ProjectItem) item)
+                .findFirst().orElseThrow().handle();
+    }
+
+    @Test
+    void dataRequest_thenTasksIntoExistingProject() throws SQLException {
+        var projects = new ProjectCommands(new ProjectJdbcRepository(connections), new TaskJdbcRepository(connections),
+                new GoalJdbcRepository(connections), tx, clock);
+        var existing = projects.create(alice, new com.milviv.domain.project.ProjectDetails(null, "Грамматика", null, null));
+
+        FakeAiAssistant ai = new FakeAiAssistant()
+                .thenTurn(new AiTurn.DataRequest("Найти проект по грамматике",
+                        List.of(new com.milviv.application.ai.contract.DataQuery.ListProjects(null, null))))
+                .thenTurn(prompt -> proposal(new Create(null,
+                        List.of(new ProjectNode(projectHandle(prompt), null, null, null,
+                                List.of(task("Present Perfect", Difficulty.ADEPT, null)))),
+                        null, null)));
+
+        HandleAiRequest.Result result = handler(ai).execute(alice, "k1", "Добавь задачу в грамматику");
+
+        assertThat(result.request().status()).isEqualTo(AiRequestStatus.EXECUTED);
+        // существующий проект не создаётся и не попадает в отчёт
+        assertThat(result.request().report()).singleElement().satisfies(item -> {
+            assertThat(item.itemId()).isEqualTo("p1.t1");
+            assertThat(item.type()).isEqualTo(EntityType.TASK);
+        });
+        assertThat(count("SELECT COUNT(*) FROM projects")).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM tasks WHERE project_id = '" + existing.id() + "'")).isEqualTo(1);
+        assertThat(result.request().dataAccessed()).singleElement().satisfies(access -> {
+            assertThat(access.query()).isEqualTo("LIST_PROJECTS");
+            assertThat(access.items()).isEqualTo(1);
+            assertThat(access.reason()).isEqualTo("Найти проект по грамматике");
+        });
+        // второй вызов получил данные первого раунда; ID в промпт не попадают
+        assertThat(ai.prompts().get(1).rounds()).hasSize(1);
+        assertThat(ai.prompts().get(1).rounds().toString()).doesNotContain(existing.id().toString());
+        assertThat(count("SELECT COUNT(*) FROM ai_requests WHERE data_rounds = 1 AND handles IS NOT NULL"
+                + " AND data_access_log IS NOT NULL")).isEqualTo(1);
+    }
+
+    @Test
+    void dataRequest_afterRoundsExhausted_isViolation() {
+        var listGoals = new AiTurn.DataRequest("Цели", List.of(new com.milviv.application.ai.contract.DataQuery.ListGoals()));
+        FakeAiAssistant ai = new FakeAiAssistant()
+                .thenTurn(listGoals)
+                .thenTurn(listGoals)
+                .thenTurn(listGoals)
+                .thenTurn(new AiTurn.Answer("Целей нет"));
+
+        HandleAiRequest.Result result = handler(ai).execute(alice, "k1", "Какие у меня цели?");
+
+        assertThat(result.request().status()).isEqualTo(AiRequestStatus.ANSWERED);
+        assertThat(ai.prompts()).hasSize(4);
+        assertThat(ai.prompts().get(3).violations()).containsExactly("outcome: DATA_ROUNDS_EXHAUSTED");
+        assertThat(ai.prompts().get(3).rounds()).hasSize(2);
+        assertThat(result.request().dataAccessed()).hasSize(2);
+    }
+
+    @Test
+    void unknownExistingHandle_isRepaired() throws SQLException {
+        FakeAiAssistant ai = new FakeAiAssistant()
+                .thenTurn(proposal(new Create(null, List.of(new ProjectNode("p_fake", null, null, null,
+                        List.of(task("t", Difficulty.NOVICE, null)))), null, null)))
+                .thenTurn(proposal(new Create(null, null, List.of(task("Одиночная", Difficulty.NOVICE, null)), null)));
+
+        handler(ai).execute(alice, "k1", "Добавь задачу");
+
+        assertThat(ai.prompts().get(1).violations()).containsExactly("plan.create.projects[0].existing: UNKNOWN_HANDLE");
+        assertThat(count("SELECT COUNT(*) FROM tasks")).isEqualTo(1);
     }
 }

@@ -4,6 +4,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -69,6 +70,32 @@ public class ReflectionAnswerJdbcRepository implements ReflectionAnswerRepositor
             return list(ps);
         } catch (SQLException ex) {
             throw new DatabaseException("Failed to list reflection answers", ex);
+        }
+    }
+
+    @Override
+    public List<ReflectionAnswer> findForAi(UUID userId, UUID taskId, Instant from, Instant toExclusive, int limit) {
+        String sql = SELECT + " WHERE a.user_id = ?"
+                + (taskId != null ? " AND c.task_id = ?" : "")
+                + (from != null ? " AND a.created_at >= ?" : "")
+                + (toExclusive != null ? " AND a.created_at < ?" : "")
+                + " ORDER BY a.created_at DESC, a.id DESC LIMIT ?";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            int i = 1;
+            ps.setObject(i++, userId);
+            if (taskId != null) {
+                ps.setObject(i++, taskId);
+            }
+            if (from != null) {
+                ps.setTimestamp(i++, Timestamp.from(from));
+            }
+            if (toExclusive != null) {
+                ps.setTimestamp(i++, Timestamp.from(toExclusive));
+            }
+            ps.setInt(i, limit);
+            return list(ps);
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to list reflection answers for AI", ex);
         }
     }
 

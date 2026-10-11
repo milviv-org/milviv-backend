@@ -2,6 +2,7 @@ package com.milviv.domain.ai;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.milviv.domain.exception.AiRequestException;
@@ -40,13 +41,17 @@ public class AiRequest extends VersionedAggregate {
     private Integer latencyMs;
     private OperationReport report;
     private Instant executedAt;
+    private List<AiHandle> handles;
+    private List<DataAccess> dataAccessLog;
+    private int dataRounds;
 
     /** Восстановление из БД. Вызывается только репозиторием. */
     public AiRequest(UUID id, UUID userId, AiRequestStatus status, String idempotencyKey, String requestHash,
                      int messageLength, String messageHash, String summary, String answer, String clarificationQuestion,
                      RefusalReason refusalReason, String errorCode, String contractVersion, String promptVersion,
                      String provider, String model, int aiCalls, Integer inputTokens, Integer outputTokens,
-                     Integer latencyMs, OperationReport report, Instant createdAt, Instant executedAt, long version) {
+                     Integer latencyMs, OperationReport report, List<AiHandle> handles, List<DataAccess> dataAccessLog,
+                     int dataRounds, Instant createdAt, Instant executedAt, long version) {
         super(version);
         this.id = id;
         this.userId = userId;
@@ -69,6 +74,9 @@ public class AiRequest extends VersionedAggregate {
         this.outputTokens = outputTokens;
         this.latencyMs = latencyMs;
         this.report = report;
+        this.handles = handles == null ? List.of() : List.copyOf(handles);
+        this.dataAccessLog = dataAccessLog == null ? List.of() : List.copyOf(dataAccessLog);
+        this.dataRounds = dataRounds;
         this.createdAt = createdAt;
         this.executedAt = executedAt;
     }
@@ -78,7 +86,7 @@ public class AiRequest extends VersionedAggregate {
                                   String provider, String model, Instant now) {
         return new AiRequest(UUID.randomUUID(), userId, AiRequestStatus.PENDING_AI, idempotencyKey, requestHash,
                 messageLength, messageHash, null, null, null, null, null, contractVersion, promptVersion,
-                provider, model, 0, null, null, null, null, now, null, 0L);
+                provider, model, 0, null, null, null, null, List.of(), List.of(), 0, now, null, 0L);
     }
 
     /** Расход на все вызовы AI в этом запросе. Токены null — провайдер их не сообщил. */
@@ -87,6 +95,19 @@ public class AiRequest extends VersionedAggregate {
     public void answered(String answer, Usage usage) {
         finish(AiRequestStatus.ANSWERED, usage);
         this.answer = answer;
+    }
+
+    /**
+     * Что AI прочитал за запрос и какие дескрипторы получил. Записывается при любом итоге,
+     * в том числе при ошибке: журнал — доказательство, какие данные ушли провайдеру (§13).
+     */
+    public void recordDataAccess(List<AiHandle> handles, List<DataAccess> dataAccessLog, int dataRounds) {
+        if (!isPending()) {
+            throw new IllegalStateException("AiRequest " + id + " is already " + status);
+        }
+        this.handles = List.copyOf(handles);
+        this.dataAccessLog = List.copyOf(dataAccessLog);
+        this.dataRounds = dataRounds;
     }
 
     /**
@@ -165,4 +186,7 @@ public class AiRequest extends VersionedAggregate {
     public OperationReport getReport()        { return report; }
     public Instant getCreatedAt()             { return createdAt; }
     public Instant getExecutedAt()            { return executedAt; }
+    public List<AiHandle> getHandles()        { return handles; }
+    public List<DataAccess> getDataAccessLog() { return dataAccessLog; }
+    public int getDataRounds()                { return dataRounds; }
 }

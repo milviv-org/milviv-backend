@@ -15,9 +15,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.milviv.domain.ai.AiHandle;
 import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
+import com.milviv.domain.ai.DataAccess;
 import com.milviv.domain.ai.OperationReport;
 import com.milviv.domain.ai.RefusalReason;
 import com.milviv.domain.exception.OptimisticLockException;
@@ -25,17 +27,19 @@ import com.milviv.infrastructure.exception.DatabaseException;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 
 /**
- * result (отчёт) — JSONB, пишется через CAST(? AS JSONB). Остальные JSONB-колонки
- * (handles, plan, decision, data_access_log) появятся в подэтапах 9.4–9.5.
+ * JSONB-колонки result, handles, data_access_log пишутся через CAST(? AS JSONB).
+ * plan и decision появятся в подэтапе 9.5.
  */
 public class AiRequestJdbcRepository implements AiRequestRepository {
 
     private static final String COLUMNS = "id, user_id, status, idempotency_key, request_hash, message_length, "
             + "message_hash, summary, answer, clarification_question, refusal_reason, error_code, contract_version, "
-            + "prompt_version, provider, model, ai_calls, input_tokens, output_tokens, latency_ms, result, created_at, "
-            + "executed_at, version";
+            + "prompt_version, provider, model, ai_calls, input_tokens, output_tokens, latency_ms, result, handles, "
+            + "data_access_log, data_rounds, created_at, executed_at, version";
 
     private static final TypeReference<List<OperationReport.Item>> REPORT_ITEMS = new TypeReference<>() {};
+    private static final TypeReference<List<AiHandle>> HANDLES = new TypeReference<>() {};
+    private static final TypeReference<List<DataAccess>> DATA_ACCESS = new TypeReference<>() {};
 
     private final ConnectionProvider connectionProvider;
     private final ObjectMapper objectMapper;
@@ -58,7 +62,8 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
     @Override
     public void add(AiRequest request) {
         String sql = "INSERT INTO ai_requests (" + COLUMNS + ") VALUES "
-                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), ?, ?, ?)";
+                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), "
+                + "CAST(? AS JSONB), ?, ?, ?, ?)";
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
             ps.setObject(1, request.getId());
             ps.setObject(2, request.getUserId());
@@ -81,9 +86,12 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
             setInteger(ps, 19, request.getOutputTokens());
             setInteger(ps, 20, request.getLatencyMs());
             ps.setString(21, toJson(request.getReport()));
-            ps.setTimestamp(22, Timestamp.from(request.getCreatedAt()));
-            ps.setTimestamp(23, timestamp(request.getExecutedAt()));
-            ps.setLong(24, request.getVersion());
+            ps.setString(22, json(request.getHandles()));
+            ps.setString(23, json(request.getDataAccessLog()));
+            ps.setInt(24, request.getDataRounds());
+            ps.setTimestamp(25, Timestamp.from(request.getCreatedAt()));
+            ps.setTimestamp(26, timestamp(request.getExecutedAt()));
+            ps.setLong(27, request.getVersion());
             ps.executeUpdate();
         } catch (SQLException ex) {
             throw new DatabaseException("Failed to insert AI request", ex);
@@ -136,6 +144,7 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
             UPDATE ai_requests
             SET status = ?, summary = ?, answer = ?, clarification_question = ?, refusal_reason = ?, error_code = ?,
                 ai_calls = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, result = CAST(? AS JSONB),
+                handles = CAST(? AS JSONB), data_access_log = CAST(? AS JSONB), data_rounds = ?,
                 executed_at = ?, version = version + 1
             WHERE id = ? AND user_id = ? AND version = ?
             """;
@@ -151,10 +160,13 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
             setInteger(ps, 9, request.getOutputTokens());
             setInteger(ps, 10, request.getLatencyMs());
             ps.setString(11, toJson(request.getReport()));
-            ps.setTimestamp(12, timestamp(request.getExecutedAt()));
-            ps.setObject(13, request.getId());
-            ps.setObject(14, request.getUserId());
-            ps.setLong(15, request.getVersion());
+            ps.setString(12, json(request.getHandles()));
+            ps.setString(13, json(request.getDataAccessLog()));
+            ps.setInt(14, request.getDataRounds());
+            ps.setTimestamp(15, timestamp(request.getExecutedAt()));
+            ps.setObject(16, request.getId());
+            ps.setObject(17, request.getUserId());
+            ps.setLong(18, request.getVersion());
             if (ps.executeUpdate() == 0) {
                 throw new OptimisticLockException("AiRequest", request.getId(), request.getVersion());
             }
@@ -191,6 +203,9 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
                         rs.getObject("output_tokens", Integer.class),
                         rs.getObject("latency_ms", Integer.class),
                         fromJson(rs.getString("result")),
+                        read(rs.getString("handles"), HANDLES),
+                        read(rs.getString("data_access_log"), DATA_ACCESS),
+                        rs.getInt("data_rounds"),
                         rs.getTimestamp("created_at").toInstant(),
                         instant(rs.getTimestamp("executed_at")),
                         rs.getLong("version")));
@@ -218,6 +233,29 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
             return new OperationReport(objectMapper.readValue(json, REPORT_ITEMS));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to read AI operation report", ex);
+        }
+    }
+
+    /** Пустой список хранится как NULL. */
+    private String json(List<?> values) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize AI request data", ex);
+        }
+    }
+
+    private <T> List<T> read(String json, TypeReference<List<T>> type) {
+        if (json == null) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, type);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to read AI request data", ex);
         }
     }
 
