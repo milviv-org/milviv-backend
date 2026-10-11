@@ -8,6 +8,7 @@
 | Цели | [goals-api.md](goals-api.md) |
 | Проекты | [projects-api.md](projects-api.md) |
 | Задачи | [tasks-api.md](tasks-api.md) |
+| Планы и календарь | [planning-api.md](planning-api.md) |
 
 ## Общие правила
 

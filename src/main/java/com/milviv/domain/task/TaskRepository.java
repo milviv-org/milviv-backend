@@ -1,5 +1,6 @@
 package com.milviv.domain.task;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,12 @@ public interface TaskRepository {
 
     /** Самый поздний срок среди задач проекта; пусто — ни у одной нет срока. */
     Optional<LocalDate> findLatestDeadlineInProject(UUID userId, UUID projectId);
+
+    /** Активные задачи со сроком в [from, to] — для календаря. */
+    List<Task> findActiveWithDeadlineBetween(UUID userId, LocalDate from, LocalDate to);
+
+    /** Задачи, выполненные в [from, toExclusive) — для календаря. */
+    List<Task> findCompletedBetween(UUID userId, Instant from, Instant toExclusive);
 
     /** Сохранить изменения. Версия не совпала — OptimisticLockException. */
     void update(Task task);

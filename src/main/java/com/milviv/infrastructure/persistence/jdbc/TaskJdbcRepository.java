@@ -139,6 +139,46 @@ public class TaskJdbcRepository implements TaskRepository {
     }
 
     @Override
+    public List<Task> findActiveWithDeadlineBetween(UUID userId, LocalDate from, LocalDate to) {
+        String sql = "SELECT " + COLUMNS + " FROM tasks WHERE user_id = ? AND status = ? AND deadline BETWEEN ? AND ?"
+                + " ORDER BY deadline, id";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setString(2, TaskStatus.ACTIVE.name());
+            ps.setObject(3, from);
+            ps.setObject(4, to);
+            return list(ps);
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to list tasks by deadline", ex);
+        }
+    }
+
+    @Override
+    public List<Task> findCompletedBetween(UUID userId, Instant from, Instant toExclusive) {
+        String sql = "SELECT " + COLUMNS + " FROM tasks WHERE user_id = ? AND status = ?"
+                + " AND completed_at >= ? AND completed_at < ? ORDER BY completed_at, id";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setString(2, TaskStatus.COMPLETED.name());
+            ps.setTimestamp(3, timestamp(from));
+            ps.setTimestamp(4, timestamp(toExclusive));
+            return list(ps);
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to list completed tasks", ex);
+        }
+    }
+
+    private List<Task> list(PreparedStatement ps) throws SQLException {
+        try (ResultSet rs = ps.executeQuery()) {
+            List<Task> result = new ArrayList<>();
+            while (rs.next()) {
+                result.add(mapRow(rs));
+            }
+            return result;
+        }
+    }
+
+    @Override
     public void update(Task task) {
         String sql = """
             UPDATE tasks

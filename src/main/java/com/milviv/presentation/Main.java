@@ -17,6 +17,9 @@ import com.milviv.application.auth.RegisterUser;
 import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
 import com.milviv.application.goal.GoalCommands;
+import com.milviv.application.planning.CalendarPolicy;
+import com.milviv.application.planning.CalendarQuery;
+import com.milviv.application.planning.PlanCommands;
 import com.milviv.application.project.ProjectCommands;
 import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
@@ -24,11 +27,14 @@ import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
 import com.milviv.domain.goal.GoalRepository;
+import com.milviv.domain.planning.PlanRepository;
+import com.milviv.domain.planning.TaskRescheduleRepository;
 import com.milviv.domain.project.ProjectRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.infrastructure.config.AppConfig;
 import com.milviv.infrastructure.config.AuthConfig;
+import com.milviv.infrastructure.config.CalendarConfig;
 import com.milviv.infrastructure.config.ConfigLoader;
 import com.milviv.infrastructure.config.ControllerRegistrar;
 import com.milviv.infrastructure.config.JacksonConfig;
@@ -46,11 +52,13 @@ import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.TaskRescheduleJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.UserJdbcRepository;
 import com.milviv.infrastructure.persistence.transaction.JdbcTransactionManager;
 import com.milviv.infrastructure.persistence.transaction.RetryableTransactionManager;
@@ -60,8 +68,10 @@ import com.milviv.infrastructure.security.InMemoryLoginAttemptLimiter;
 import com.milviv.infrastructure.security.JwtAccessTokenService;
 import com.milviv.infrastructure.security.JwtCookieAuthenticator;
 import com.milviv.presentation.rest.controllers.AuthController;
+import com.milviv.presentation.rest.controllers.CalendarController;
 import com.milviv.presentation.rest.controllers.GoalController;
 import com.milviv.presentation.rest.controllers.HealthController;
+import com.milviv.presentation.rest.controllers.PlanController;
 import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
 import com.milviv.shared.validation.annotation.AnnotationValidator;
@@ -89,6 +99,7 @@ public class Main {
                     .register(ConfigLoader.class, Scope.SINGLETON)
                     .register(AppConfig.class, Scope.SINGLETON)
                     .register(AuthConfig.class, Scope.SINGLETON)
+                    .register(CalendarConfig.class, Scope.SINGLETON)
                     .register(DatabaseConnectionManager.class, Scope.SINGLETON)
                     .register(FlywayMigrationRunner.class, Scope.SINGLETON)
                     .register(JacksonConfig.class, Scope.SINGLETON);
@@ -140,11 +151,16 @@ public class Main {
             container.singletone(TaskRepository.class, new TaskJdbcRepository(connectionProvider));
             container.singletone(TaskCompletionRepository.class, new TaskCompletionJdbcRepository(connectionProvider));
             container.singletone(PointsHistoryRepository.class, new PointsHistoryJdbcRepository(connectionProvider));
+            container.singletone(PlanRepository.class, new PlanJdbcRepository(connectionProvider));
+            container.singletone(TaskRescheduleRepository.class, new TaskRescheduleJdbcRepository(connectionProvider));
+            container.singletone(CalendarPolicy.class, container.get(CalendarConfig.class).toPolicy());
             container
                     .register(GoalCommands.class)
                     .register(ProjectCommands.class)
                     .register(TaskCommands.class)
-                    .register(CompleteTask.class);
+                    .register(CompleteTask.class)
+                    .register(PlanCommands.class)
+                    .register(CalendarQuery.class);
 
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
@@ -177,6 +193,8 @@ public class Main {
                     GoalController.class,
                     ProjectController.class,
                     TaskController.class,
+                    PlanController.class,
+                    CalendarController.class,
                     HealthController.class
             );
 

@@ -32,6 +32,7 @@ import com.milviv.domain.task.TaskFilter;
 import com.milviv.domain.task.TaskStatus;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
@@ -53,6 +54,7 @@ class TaskJdbcH2Test {
     private TaskCompletionJdbcRepository completions;
     private PointsHistoryJdbcRepository points;
     private TaskCommands commands;
+    private TransactionalConnectionProvider connections;
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final UUID alice = UUID.randomUUID();
     private final UUID bob = UUID.randomUUID();
@@ -67,7 +69,7 @@ class TaskJdbcH2Test {
             H2WorkSchema.create(st);
         }
 
-        TransactionalConnectionProvider connections = new TransactionalConnectionProvider();
+        connections = new TransactionalConnectionProvider();
         tx = new RetryableTransactionManager(new JdbcTransactionManager(dataSource), 3, 1, 1);
         tasks = new TaskJdbcRepository(connections);
         completions = new TaskCompletionJdbcRepository(connections);
@@ -156,7 +158,7 @@ class TaskJdbcH2Test {
     @Test
     void complete_shouldWriteStatusCompletionAndPoints_together() throws SQLException {
         TaskView task = commands.create(alice, details("Задача"));
-        CompleteTask completeTask = new CompleteTask(tasks, completions, points, tx, clock);
+        CompleteTask completeTask = new CompleteTask(tasks, completions, points, new PlanJdbcRepository(connections), tx, clock);
 
         CompleteTask.Result result = completeTask.execute(alice, task.id());
 
@@ -172,7 +174,7 @@ class TaskJdbcH2Test {
     void complete_shouldRollBackEverything_whenPointsFail() throws SQLException {
         TaskView task = commands.create(alice, details("Задача"));
         PointsHistoryRepository failing = (u, t, p, r, at) -> { throw new IllegalStateException("points down"); };
-        CompleteTask completeTask = new CompleteTask(tasks, completions, failing, tx, clock);
+        CompleteTask completeTask = new CompleteTask(tasks, completions, failing, new PlanJdbcRepository(connections), tx, clock);
 
         assertThatThrownBy(() -> completeTask.execute(alice, task.id())).hasMessage("points down");
 
@@ -183,7 +185,7 @@ class TaskJdbcH2Test {
     @Test
     void delete_shouldKeepCompletionAndPoints() throws SQLException {
         TaskView task = commands.create(alice, details("Задача"));
-        new CompleteTask(tasks, completions, points, tx, clock).execute(alice, task.id());
+        new CompleteTask(tasks, completions, points, new PlanJdbcRepository(connections), tx, clock).execute(alice, task.id());
 
         commands.delete(alice, task.id());
 

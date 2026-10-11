@@ -1,5 +1,6 @@
 package com.milviv.domain.project;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,9 @@ public interface ProjectRepository {
 
     /** Проекты пользователя, новые первыми. status, goalId = null — без фильтра. */
     List<Project> findByUser(UUID userId, ProjectStatus status, UUID goalId, int limit, int offset);
+
+    /** Активные проекты со сроком в [from, to] — для календаря. */
+    List<Project> findActiveWithDeadlineBetween(UUID userId, LocalDate from, LocalDate to);
 
     /** Редактируемые поля и статус. Версия не совпала — OptimisticLockException. Сложность не трогает. */
     void update(Project project);

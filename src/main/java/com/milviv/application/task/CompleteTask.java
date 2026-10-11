@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.milviv.application.transaction.TransactionManager;
 import com.milviv.domain.gamification.PointsHistoryRepository;
+import com.milviv.domain.planning.PlanRepository;
 import com.milviv.domain.task.Task;
 import com.milviv.domain.task.TaskCompletion;
 import com.milviv.domain.task.TaskCompletionRepository;
@@ -24,14 +25,17 @@ public class CompleteTask {
     private final TaskRepository tasks;
     private final TaskCompletionRepository completions;
     private final PointsHistoryRepository pointsHistory;
+    private final PlanRepository plans;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public CompleteTask(TaskRepository tasks, TaskCompletionRepository completions,
-                        PointsHistoryRepository pointsHistory, TransactionManager transactionManager, Clock clock) {
+                        PointsHistoryRepository pointsHistory, PlanRepository plans,
+                        TransactionManager transactionManager, Clock clock) {
         this.tasks = tasks;
         this.completions = completions;
         this.pointsHistory = pointsHistory;
+        this.plans = plans;
         this.transactionManager = transactionManager;
         this.clock = clock;
     }
@@ -45,8 +49,9 @@ public class CompleteTask {
 
             task.complete(now);
             tasks.update(task);
-            // Планирование появится на этапе 4 — пока дата плана неизвестна
-            completions.add(TaskCompletion.of(task, null));
+            // план против факта (QG-04): последний разовый план задачи; только повторяющиеся — null
+            LocalDate plannedDate = plans.findLatestPlanDateForTask(userId, task.getId()).orElse(null);
+            completions.add(TaskCompletion.of(task, plannedDate));
             pointsHistory.recordTaskCompleted(userId, task.getId(), task.getPoints(),
                     "Task completed: " + task.getTitle(), now);
             return task;

@@ -105,6 +105,27 @@ public class ProjectJdbcRepository implements ProjectRepository {
     }
 
     @Override
+    public List<Project> findActiveWithDeadlineBetween(UUID userId, LocalDate from, LocalDate to) {
+        String sql = "SELECT " + COLUMNS + " FROM projects WHERE user_id = ? AND status = ? AND deadline BETWEEN ? AND ?"
+                + " ORDER BY deadline, id";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setString(2, ProjectStatus.ACTIVE.name());
+            ps.setObject(3, from);
+            ps.setObject(4, to);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Project> result = new ArrayList<>();
+                while (rs.next()) {
+                    result.add(mapRow(rs));
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to list projects by deadline", ex);
+        }
+    }
+
+    @Override
     public void update(Project project) {
         String sql = """
             UPDATE projects
