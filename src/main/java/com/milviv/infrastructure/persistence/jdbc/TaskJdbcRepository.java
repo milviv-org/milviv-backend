@@ -14,6 +14,7 @@ import java.util.UUID;
 import com.milviv.domain.exception.OptimisticLockException;
 import com.milviv.domain.task.Difficulty;
 import com.milviv.domain.task.Task;
+import com.milviv.domain.task.TaskFilter;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.domain.task.TaskStatus;
 import com.milviv.infrastructure.exception.DatabaseException;
@@ -71,15 +72,23 @@ public class TaskJdbcRepository implements TaskRepository {
     }
 
     @Override
-    public List<Task> findByUser(UUID userId, TaskStatus status, int limit, int offset) {
+    public List<Task> findByUser(UUID userId, TaskFilter filter, int limit, int offset) {
         String sql = "SELECT " + COLUMNS + " FROM tasks WHERE user_id = ?"
-                + (status != null ? " AND status = ?" : "")
+                + (filter.status() != null ? " AND status = ?" : "")
+                + (filter.projectId() != null ? " AND project_id = ?" : "")
+                + (filter.goalId() != null ? " AND goal_id = ?" : "")
                 + " ORDER BY created_at DESC, id LIMIT ? OFFSET ?";
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
             int i = 1;
             ps.setObject(i++, userId);
-            if (status != null) {
-                ps.setString(i++, status.name());
+            if (filter.status() != null) {
+                ps.setString(i++, filter.status().name());
+            }
+            if (filter.projectId() != null) {
+                ps.setObject(i++, filter.projectId());
+            }
+            if (filter.goalId() != null) {
+                ps.setObject(i++, filter.goalId());
             }
             ps.setInt(i++, limit);
             ps.setInt(i, offset);
@@ -96,27 +105,63 @@ public class TaskJdbcRepository implements TaskRepository {
     }
 
     @Override
+    public List<Difficulty> findNotCancelledDifficultiesInProject(UUID userId, UUID projectId) {
+        String sql = "SELECT difficulty FROM tasks WHERE user_id = ? AND project_id = ? AND status <> ?";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setObject(2, projectId);
+            ps.setString(3, TaskStatus.CANCELLED.name());
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Difficulty> result = new ArrayList<>();
+                while (rs.next()) {
+                    result.add(Difficulty.valueOf(rs.getString(1)));
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to load project task difficulties", ex);
+        }
+    }
+
+    @Override
+    public Optional<LocalDate> findLatestDeadlineInProject(UUID userId, UUID projectId) {
+        String sql = "SELECT MAX(deadline) FROM tasks WHERE user_id = ? AND project_id = ?";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setObject(2, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return Optional.ofNullable(rs.getObject(1, LocalDate.class));
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to find latest task deadline", ex);
+        }
+    }
+
+    @Override
     public void update(Task task) {
         String sql = """
             UPDATE tasks
-            SET title = ?, description = ?, difficulty = ?, points = ?, status = ?, start_date = ?, deadline = ?,
-                reminder_at = ?, completed_at = ?, updated_at = ?, version = version + 1
+            SET project_id = ?, goal_id = ?, title = ?, description = ?, difficulty = ?, points = ?, status = ?,
+                start_date = ?, deadline = ?, reminder_at = ?, completed_at = ?, updated_at = ?, version = version + 1
             WHERE id = ? AND user_id = ? AND version = ?
             """;
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
-            ps.setString(1, task.getTitle());
-            ps.setString(2, task.getDescription());
-            ps.setString(3, task.getDifficulty().name());
-            ps.setInt(4, task.getPoints());
-            ps.setString(5, task.getStatus().name());
-            ps.setObject(6, task.getStartDate());
-            ps.setObject(7, task.getDeadline());
-            ps.setTimestamp(8, timestamp(task.getReminderAt()));
-            ps.setTimestamp(9, timestamp(task.getCompletedAt()));
-            ps.setTimestamp(10, timestamp(task.getUpdatedAt()));
-            ps.setObject(11, task.getId());
-            ps.setObject(12, task.getUserId());
-            ps.setLong(13, task.getVersion());
+            ps.setObject(1, task.getProjectId());
+            ps.setObject(2, task.getGoalId());
+            ps.setString(3, task.getTitle());
+            ps.setString(4, task.getDescription());
+            ps.setString(5, task.getDifficulty().name());
+            ps.setInt(6, task.getPoints());
+            ps.setString(7, task.getStatus().name());
+            ps.setObject(8, task.getStartDate());
+            ps.setObject(9, task.getDeadline());
+            ps.setTimestamp(10, timestamp(task.getReminderAt()));
+            ps.setTimestamp(11, timestamp(task.getCompletedAt()));
+            ps.setTimestamp(12, timestamp(task.getUpdatedAt()));
+            ps.setObject(13, task.getId());
+            ps.setObject(14, task.getUserId());
+            ps.setLong(15, task.getVersion());
 
             if (ps.executeUpdate() == 0) {
                 throw new OptimisticLockException("Task", task.getId(), task.getVersion());

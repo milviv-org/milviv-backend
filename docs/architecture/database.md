@@ -89,7 +89,7 @@ Refresh-токены сессий входа. Хранится только хе
 | `goal_id` | UUID | Цель, необязательна |
 | `title` | VARCHAR(255) | Название |
 | `description` | TEXT | Описание |
-| `calculated_difficulty` | VARCHAR(20) | Сложность, вычисленная системой по задачам. Пользователь её не задаёт |
+| `calculated_difficulty` | VARCHAR(20) | Сложность, вычисленная системой: средний уровень неотменённых задач, округлённый; NULL — задач нет. Пользователь её не задаёт; пересчёт не меняет `version` |
 | `status` | VARCHAR(20) | `ACTIVE`, `COMPLETED`, `CANCELLED` |
 | `deadline` | DATE | Срок; не раньше сроков задач проекта (проверяет приложение) |
 | `completed_at` | TIMESTAMP | Когда завершён |

@@ -22,7 +22,7 @@ class TaskTest {
     private final UUID userId = UUID.randomUUID();
 
     private static TaskDetails details(Difficulty difficulty, Integer points, LocalDate start, LocalDate deadline) {
-        return new TaskDetails("  Выучить времена  ", null, difficulty, points, start, deadline, null);
+        return new TaskDetails("  Выучить времена  ", null, difficulty, points, start, deadline, null, null, null);
     }
 
     @Test

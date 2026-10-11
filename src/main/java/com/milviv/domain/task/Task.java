@@ -15,7 +15,9 @@ import com.milviv.domain.shared.VersionedAggregate;
  * - баллы 1..1000; не указаны — берутся по сложности;
  * - дату начала и срок можно ставить в прошлом, но начало не позже срока;
  * - выполнить или отменить можно только активную задачу;
- * - выполненную задачу можно редактировать — уже начисленные баллы не меняются.
+ * - выполненную задачу можно редактировать — уже начисленные баллы не меняются;
+ * - срок не позже срока проекта — проверяет Project.requireTaskDeadlineFits,
+ *   проект загружает прикладной сценарий.
  */
 public class Task extends VersionedAggregate {
 
@@ -24,10 +26,10 @@ public class Task extends VersionedAggregate {
 
     private final UUID id;
     private final UUID userId;
-    private final UUID projectId;
-    private final UUID goalId;
     private final Instant createdAt;
 
+    private UUID projectId;
+    private UUID goalId;
     private String title;
     private String description;
     private Difficulty difficulty;
@@ -98,6 +100,8 @@ public class Task extends VersionedAggregate {
         if (details.startDate() != null && details.deadline() != null && details.startDate().isAfter(details.deadline())) {
             throw new ValidationException("startDate", "Дата начала не может быть позже срока");
         }
+        this.projectId = details.projectId();
+        this.goalId = details.goalId();
         this.title = details.title().trim();
         this.description = details.description();
         this.difficulty = details.difficulty();

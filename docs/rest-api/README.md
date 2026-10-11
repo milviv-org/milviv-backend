@@ -5,6 +5,8 @@
 | Модуль | Файл |
 |--------|------|
 | Аутентификация | [auth-api.md](auth-api.md) |
+| Цели | [goals-api.md](goals-api.md) |
+| Проекты | [projects-api.md](projects-api.md) |
 | Задачи | [tasks-api.md](tasks-api.md) |
 
 ## Общие правила

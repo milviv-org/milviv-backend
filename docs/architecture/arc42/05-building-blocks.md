@@ -52,9 +52,9 @@ presentation  →  infrastructure  →  application  →  domain
 | ---- | --------------- | ------ |
 | `user` | Пользователь, учётные данные, `UserRepository` | ✅ |
 | `auth` | Refresh-токены сессий, `RefreshTokenRepository` | ✅ |
-| `goal` | Цели (FR-01) | ⚠️ |
-| `project` | Проекты и связь с целями (FR-02) | ⚠️ |
-| `task` | Задачи, срок, сложность, факт выполнения (FR-03, FR-04) | 🟡 связь с проектом и целью — этап 3 |
+| `goal` | Цели (FR-01) | ✅ |
+| `project` | Проекты, связь с целями, вычисляемая сложность (FR-02) | ✅ |
+| `task` | Задачи, срок, сложность, факт выполнения, связь с проектом и целью (FR-03, FR-04) | ✅ |
 | `planning` | Планирование на дни, календарь (FR-05, FR-06) | ⚠️ |
 | `gamification` | Баллы, баланс, награды, обмен (FR-09…FR-11) | 🟡 начисление за задачу |
 | `reflection` | Вопросы и ответы рефлексии (FR-12) | ⚠️ |
@@ -74,7 +74,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `transaction` | `TransactionManager`, `Propagation`, `IsolationLevel` | ✅ |
-| Сценарии предметных областей | По одному пакету на область | ⚠️ |
+| Сценарии предметных областей | По одному пакету на область | 🟡 auth, user, goal, project, task |
 
 ### infrastructure
 
@@ -99,7 +99,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `Main` | Composition root | ✅ |
-| `rest/controllers` | `AuthController`, `UserContextController`, `HealthController` | 🟡 |
+| `rest/controllers` | `AuthController`, `GoalController`, `ProjectController`, `TaskController`, `HealthController` | 🟡 |
 | `rest/dto` | Внешний контракт API отдельно от доменных сущностей | ⚠️ |
 | Аутентификация | `@Public` + проверка токена в `RouterScanner` (`infrastructure/http`, `infrastructure/security`) | ✅ |
 | `rest/exception` | Обработка исключений на границе HTTP | ⚠️ |
@@ -117,6 +117,6 @@ presentation  →  infrastructure  →  application  →  domain
 
 ## 5.3 Текущее состояние
 
-Реализованы инфраструктурный слой целиком и один сквозной срез — `user` (регистрация и вход). Остальные предметные области существуют как решение о декомпозиции, зафиксированное выше.
+Реализованы инфраструктурный слой и срезы: аутентификация, цели, проекты, задачи с начислением баллов. Остальные предметные области существуют как решение о декомпозиции, зафиксированное выше.
 
-Схема БД опережает код: миграции V1–V14 создают таблицы всех предметных областей, а код есть только у `users`. Список таблиц и колонок — [database.md](../database.md).
+Схема БД опережает код: миграции V1–V15 создают таблицы всех предметных областей, код есть у `users`, `refresh_tokens`, `goals`, `projects`, `tasks`, `task_completions`, `points_history`. Список таблиц и колонок — [database.md](../database.md).

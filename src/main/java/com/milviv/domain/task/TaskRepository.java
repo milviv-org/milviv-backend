@@ -1,5 +1,6 @@
 package com.milviv.domain.task;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,8 +15,14 @@ public interface TaskRepository {
 
     Optional<Task> findById(UUID userId, UUID taskId);
 
-    /** Задачи пользователя, новые первыми. status = null — все статусы. */
-    List<Task> findByUser(UUID userId, TaskStatus status, int limit, int offset);
+    /** Задачи пользователя, новые первыми. */
+    List<Task> findByUser(UUID userId, TaskFilter filter, int limit, int offset);
+
+    /** Сложности неотменённых задач проекта — для вычисления сложности проекта. */
+    List<Difficulty> findNotCancelledDifficultiesInProject(UUID userId, UUID projectId);
+
+    /** Самый поздний срок среди задач проекта; пусто — ни у одной нет срока. */
+    Optional<LocalDate> findLatestDeadlineInProject(UUID userId, UUID projectId);
 
     /** Сохранить изменения. Версия не совпала — OptimisticLockException. */
     void update(Task task);

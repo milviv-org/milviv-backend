@@ -8,10 +8,9 @@ import java.util.UUID;
 import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.task.TaskView;
-import com.milviv.domain.exception.NotFoundException;
-import com.milviv.domain.exception.ValidationException;
 import com.milviv.domain.task.Difficulty;
 import com.milviv.domain.task.TaskDetails;
+import com.milviv.domain.task.TaskFilter;
 import com.milviv.domain.task.TaskStatus;
 import com.milviv.infrastructure.http.HttpContext;
 import com.milviv.infrastructure.http.annotations.Controller;
@@ -29,8 +28,6 @@ import com.milviv.shared.validation.annotation.annotations.Required;
 @Controller("/tasks")
 public class TaskController {
 
-    static final int DEFAULT_PAGE_SIZE = 50;
-
     record CreateTaskRequest(
             @Required @MaxLength(length = 255) String title,
             @MaxLength(length = 5000) String description,
@@ -38,10 +35,13 @@ public class TaskController {
             @Min(num = 1) @Max(num = 1000) Integer points,
             LocalDate startDate,
             LocalDate deadline,
-            Instant reminderAt
+            Instant reminderAt,
+            UUID projectId,
+            UUID goalId
     ) {
         TaskDetails toDetails() {
-            return new TaskDetails(title, description, Difficulty.valueOf(difficulty), points, startDate, deadline, reminderAt);
+            return new TaskDetails(title, description, Difficulty.valueOf(difficulty), points, startDate, deadline,
+                    reminderAt, projectId, goalId);
         }
     }
 
@@ -54,10 +54,13 @@ public class TaskController {
             LocalDate startDate,
             LocalDate deadline,
             Instant reminderAt,
+            UUID projectId,
+            UUID goalId,
             @Required Long version
     ) {
         TaskDetails toDetails() {
-            return new TaskDetails(title, description, Difficulty.valueOf(difficulty), points, startDate, deadline, reminderAt);
+            return new TaskDetails(title, description, Difficulty.valueOf(difficulty), points, startDate, deadline,
+                    reminderAt, projectId, goalId);
         }
     }
 
@@ -79,10 +82,13 @@ public class TaskController {
 
     @Get("")
     public void list(HttpContext ctx) throws Exception {
-        TaskStatus status = parseStatus(ctx.pathQuery("status"));
-        int limit = parseInt(ctx.pathQuery("limit"), "limit", DEFAULT_PAGE_SIZE);
-        int offset = parseInt(ctx.pathQuery("offset"), "offset", 0);
-        ctx.json(200, new TaskListResponse(taskCommands.list(ctx.userId(), status, limit, offset)));
+        TaskFilter filter = new TaskFilter(
+                RequestParams.enumQuery(ctx, "status", TaskStatus.class),
+                RequestParams.uuidQuery(ctx, "projectId"),
+                RequestParams.uuidQuery(ctx, "goalId"));
+        int limit = RequestParams.intQuery(ctx, "limit", RequestParams.DEFAULT_PAGE_SIZE);
+        int offset = RequestParams.intQuery(ctx, "offset", 0);
+        ctx.json(200, new TaskListResponse(taskCommands.list(ctx.userId(), filter, limit, offset)));
     }
 
     @Get("/{id}")
@@ -112,34 +118,7 @@ public class TaskController {
         ctx.json(200, taskCommands.cancel(ctx.userId(), taskId(ctx)));
     }
 
-    /** Неверный id неотличим от несуществующей задачи — 404. */
     private static UUID taskId(HttpContext ctx) {
-        try {
-            return UUID.fromString(ctx.pathParam("id"));
-        } catch (IllegalArgumentException | NullPointerException ex) {
-            throw new NotFoundException("Задача не найдена");
-        }
-    }
-
-    private static TaskStatus parseStatus(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return TaskStatus.valueOf(value);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("status", "Допустимые значения: ACTIVE, COMPLETED, CANCELLED");
-        }
-    }
-
-    private static int parseInt(String value, String field, int defaultValue) {
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException ex) {
-            throw new ValidationException(field, "Должно быть целым числом");
-        }
+        return RequestParams.pathId(ctx, "Задача не найдена");
     }
 }

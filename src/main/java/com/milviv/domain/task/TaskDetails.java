@@ -2,11 +2,14 @@ package com.milviv.domain.task;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * Редактируемые поля задачи.
  *
- * @param points баллы; null — по сложности
+ * @param points    баллы; null — по сложности
+ * @param projectId проект; null — без проекта
+ * @param goalId    цель; null — без цели
  */
 public record TaskDetails(
         String title,
@@ -15,5 +18,7 @@ public record TaskDetails(
         Integer points,
         LocalDate startDate,
         LocalDate deadline,
-        Instant reminderAt
+        Instant reminderAt,
+        UUID projectId,
+        UUID goalId
 ) {}

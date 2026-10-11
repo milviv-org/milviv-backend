@@ -16,11 +16,15 @@ import com.milviv.application.auth.RefreshSession;
 import com.milviv.application.auth.RegisterUser;
 import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.application.goal.GoalCommands;
+import com.milviv.application.project.ProjectCommands;
 import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
+import com.milviv.domain.goal.GoalRepository;
+import com.milviv.domain.project.ProjectRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.infrastructure.config.AppConfig;
@@ -41,7 +45,9 @@ import com.milviv.infrastructure.persistence.DatabaseConnectionManager;
 import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
+import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
@@ -54,7 +60,9 @@ import com.milviv.infrastructure.security.InMemoryLoginAttemptLimiter;
 import com.milviv.infrastructure.security.JwtAccessTokenService;
 import com.milviv.infrastructure.security.JwtCookieAuthenticator;
 import com.milviv.presentation.rest.controllers.AuthController;
+import com.milviv.presentation.rest.controllers.GoalController;
 import com.milviv.presentation.rest.controllers.HealthController;
+import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
 import com.milviv.shared.validation.annotation.AnnotationValidator;
 
@@ -126,11 +134,15 @@ public class Main {
                     .register(Logout.class)
                     .register(GetCurrentUser.class);
 
-            // Задачи
+            // Цели, проекты, задачи
+            container.singletone(GoalRepository.class, new GoalJdbcRepository(connectionProvider));
+            container.singletone(ProjectRepository.class, new ProjectJdbcRepository(connectionProvider));
             container.singletone(TaskRepository.class, new TaskJdbcRepository(connectionProvider));
             container.singletone(TaskCompletionRepository.class, new TaskCompletionJdbcRepository(connectionProvider));
             container.singletone(PointsHistoryRepository.class, new PointsHistoryJdbcRepository(connectionProvider));
             container
+                    .register(GoalCommands.class)
+                    .register(ProjectCommands.class)
                     .register(TaskCommands.class)
                     .register(CompleteTask.class);
 
@@ -162,6 +174,8 @@ public class Main {
             ControllerRegistrar contollerRegistrar = new ControllerRegistrar(container, routerScanner);
             contollerRegistrar.register(
                     AuthController.class,
+                    GoalController.class,
+                    ProjectController.class,
                     TaskController.class,
                     HealthController.class
             );
