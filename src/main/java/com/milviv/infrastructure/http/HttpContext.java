@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.milviv.domain.exception.UnauthorizedException;
+import com.milviv.domain.exception.ValidationException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -38,9 +41,24 @@ public class HttpContext {
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 
+    /**
+     * Тело запроса как объект. Некорректный JSON или значение неверного типа
+     * (например, дата не в формате ISO) — ValidationException → 400, а не 500.
+     */
     public <T> T body(Class<T> type) throws IOException {
         String json = request.getReader().lines().collect(Collectors.joining());
-        T obj = objectMapper.readValue(json, type);
+        T obj;
+        try {
+            obj = objectMapper.readValue(json, type);
+        } catch (MismatchedInputException ex) {
+            String field = ex.getPath().isEmpty() ? "body" : ex.getPath().getLast().getFieldName();
+            throw new ValidationException(field != null ? field : "body", "Некорректное значение");
+        } catch (JsonProcessingException ex) {
+            throw new ValidationException("body", "Некорректный JSON");
+        }
+        if (obj == null) {
+            throw new ValidationException("body", "Тело запроса обязательно");
+        }
         this.httpContextValidator.validate(obj);
 
         return obj;
