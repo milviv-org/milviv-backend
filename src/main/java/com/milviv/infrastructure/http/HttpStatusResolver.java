@@ -15,6 +15,7 @@ public class HttpStatusResolver {
             "FORBIDDEN", HttpServletResponse.SC_FORBIDDEN,
             "CONFLICT", HttpServletResponse.SC_CONFLICT,
             "OPTIMISTIC_LOCK", HttpServletResponse.SC_CONFLICT,
+            "TOO_MANY_REQUESTS", 429,
             "DATABASE", HttpServletResponse.SC_SERVICE_UNAVAILABLE
     );
 

@@ -4,19 +4,26 @@ import java.lang.reflect.Method;
 
 import com.milviv.infrastructure.exception.RouterConfigurationException;
 import com.milviv.infrastructure.http.HttpContext;
+import com.milviv.infrastructure.http.RequestAuthenticator;
 import com.milviv.infrastructure.http.annotations.Controller;
 import com.milviv.infrastructure.http.annotations.Delete;
 import com.milviv.infrastructure.http.annotations.Get;
 import com.milviv.infrastructure.http.annotations.Patch;
 import com.milviv.infrastructure.http.annotations.Post;
+import com.milviv.infrastructure.http.annotations.Public;
 import com.milviv.infrastructure.http.annotations.Put;
 
 public class RouterScanner implements RouterScannerInterface {
 
     private final RouterInterface router;
+    private final RequestAuthenticator authenticator;
 
-    public RouterScanner(RouterInterface router) {
+    /**
+     * @param authenticator проверка входа; вызывается перед каждым обработчиком без @Public
+     */
+    public RouterScanner(RouterInterface router, RequestAuthenticator authenticator) {
         this.router = router;
+        this.authenticator = authenticator;
     }
 
     @Override
@@ -49,7 +56,13 @@ public class RouterScanner implements RouterScannerInterface {
 
             validateMethod(method);
 
-            RouteHandler handler = ctx -> method.invoke(controller, ctx);
+            // Закрыто по умолчанию: без @Public обработчик вызывается только после проверки входа
+            RouteHandler handler = method.isAnnotationPresent(Public.class)
+                    ? ctx -> method.invoke(controller, ctx)
+                    : ctx -> {
+                        authenticator.authenticate(ctx);
+                        method.invoke(controller, ctx);
+                    };
 
             if (method.isAnnotationPresent(Get.class)) {
                 String path = method.getAnnotation(Get.class).value();

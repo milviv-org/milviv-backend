@@ -78,7 +78,7 @@ class PostgresTransactionTest {
 
     @Test
     void migrations_shouldApplyOnPostgres() {
-        assertThat(migrationsApplied).isEqualTo(14);
+        assertThat(migrationsApplied).isEqualTo(15);
     }
 
     // ─── Rollback ─────────────────────────────────────────────────────────────

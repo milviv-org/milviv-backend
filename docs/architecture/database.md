@@ -14,7 +14,8 @@
 
 | Таблица | Назначение | Миграция |
 |---------|------------|----------|
-| [users](#users) | Пользователи | V1, V8 |
+| [users](#users) | Пользователи | V1, V8, V15 |
+| [refresh_tokens](#refresh_tokens) | Сессии входа | V15 |
 | [goals](#goals) | Цели | V9 |
 | [projects](#projects) | Проекты | V3, V8, V9 |
 | [tasks](#tasks) | Задачи | V2, V8, V9 |
@@ -37,17 +38,32 @@
 
 ### users
 
-Пользователь. Баланс баллов здесь не хранится — его считают по `points_history`.
+Пользователь. Входит по email и паролю. Баланс баллов здесь не хранится — его считают по `points_history`.
 
 | Колонка | Тип | Описание |
 |---------|-----|----------|
 | `id` | UUID | Ключ |
-| `username` | VARCHAR(100) | Логин, уникальный |
+| `email` | VARCHAR(255) | Логин, уникальный, в нижнем регистре |
+| `name` | VARCHAR(100) | Имя для отображения |
 | `password_hash` | VARCHAR(255) | BCrypt-хеш пароля |
-| `email` | VARCHAR(255) | Email, необязателен |
 | `hidden_rewards_password_hash` | VARCHAR(255) | BCrypt-хеш общего пароля скрытых наград |
 | `created_at`, `updated_at` | TIMESTAMP | Создан, изменён |
 | `version` | BIGINT | Версия |
+
+### refresh_tokens
+
+Refresh-токены сессий входа. Хранится только хеш. Токены одной сессии объединены `family_id`.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | UUID | Ключ |
+| `user_id` | UUID | Владелец |
+| `family_id` | UUID | Сессия: общий для всех токенов, выданных при ротации |
+| `token_hash` | VARCHAR(64) | SHA-256 токена, уникален |
+| `created_at` | TIMESTAMP | Выдан |
+| `expires_at` | TIMESTAMP | Срок этого токена |
+| `session_expires_at` | TIMESTAMP | Абсолютный срок сессии |
+| `revoked_at` | TIMESTAMP | Отозван (ротация, выход, повторное использование); NULL — действует |
 
 ### goals
 

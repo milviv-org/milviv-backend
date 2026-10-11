@@ -4,15 +4,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Порт доступа к хранилищу пользователей.
- *
- * Живёт в Domain Layer — не знает про JDBC, SQL, транзакции.
- * Реализация находится в Infrastructure Layer (UserJdbcRepository).
+ * Хранилище пользователей. Реализация — в infrastructure.
+ * Методы вызываются внутри TransactionManager.execute().
  */
 public interface UserRepository {
-    void save(User user);
+
+    void add(User user);
+
     Optional<User> findById(UUID id);
-    Optional<User> findByUsername(String username);
-    boolean existsByUsername(String username);
+
+    /** email ожидается нормализованным (User.normalizeEmail). */
+    Optional<User> findByEmail(String email);
+
+    /** email ожидается нормализованным (User.normalizeEmail). */
     boolean existsByEmail(String email);
 }

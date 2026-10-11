@@ -1,14 +1,18 @@
 package com.milviv.infrastructure.http;
 
 import java.io.IOException;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.milviv.domain.exception.UnauthorizedException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 public class HttpContext {
+
+    private static final String USER_ID_ATTRIBUTE = HttpContext.class.getName() + ".userId";
 
     private final ObjectMapper objectMapper;
 
@@ -48,6 +52,25 @@ public class HttpContext {
 
     public String pathQuery(String name) {
         return request.getParameter(name);
+    }
+
+    /** Ответ без тела, например 204 No Content. */
+    public void status(int status) {
+        response.setStatus(status);
+    }
+
+    /** Вызывается RequestAuthenticator после проверки токена. */
+    public void authenticateAs(UUID userId) {
+        request.setAttribute(USER_ID_ATTRIBUTE, userId);
+    }
+
+    /** Id вошедшего пользователя. В @Public-маршрутах входа нет — бросает UnauthorizedException. */
+    public UUID userId() {
+        Object userId = request.getAttribute(USER_ID_ATTRIBUTE);
+        if (userId instanceof UUID id) {
+            return id;
+        }
+        throw new UnauthorizedException("Требуется вход");
     }
 
     public HttpServletRequest getRequest() {

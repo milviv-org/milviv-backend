@@ -27,6 +27,9 @@
 | AD-21 | Создание через AI — без подтверждения | Создание ничего не портит; защита — лимиты | [decisions.md](concepts/ai-assistant/decisions.md) |
 | AD-22 | Согласие на использование данных AI — один раз, хранится на сервере | Без согласия AI недоступен и во фронтенде, и на сервере | [concepts/ai-assistant/](concepts/ai-assistant/user-flow.md) §6.10 |
 | AD-23 | Лимиты AI — в конфиге с дефолтами | Как `AppConfig`; меняются без изменения кода | [concepts/ai-assistant/](concepts/ai-assistant/limits-and-security.md) §8 |
+| AD-24 | Access — JWT HS256 на 15 минут, refresh — непрозрачный токен с ротацией и отзывом сессии при повторном использовании | Короткий access без хранения; refresh можно отозвать | [concepts/authentication.md](concepts/authentication.md) |
+| AD-25 | Токены только в HttpOnly-cookie `Secure; SameSite=Strict` | Защита от кражи через XSS и от CSRF | [concepts/authentication.md](concepts/authentication.md) |
+| AD-26 | Маршруты закрыты по умолчанию, открытые — `@Public` | Забытая проверка не открывает данные (AR-05) | [8.6](08-crosscutting-concepts.md) |
 
 ## Нерешённое
 

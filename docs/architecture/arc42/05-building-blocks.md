@@ -51,6 +51,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `user` | Пользователь, учётные данные, `UserRepository` | ✅ |
+| `auth` | Refresh-токены сессий, `RefreshTokenRepository` | ✅ |
 | `goal` | Цели (FR-01) | ⚠️ |
 | `project` | Проекты и связь с целями (FR-02) | ⚠️ |
 | `task` | Задачи, срок, сложность (FR-03, FR-04) | ⚠️ |
@@ -100,10 +101,9 @@ presentation  →  infrastructure  →  application  →  domain
 | `Main` | Composition root | ✅ |
 | `rest/controllers` | `AuthController`, `UserContextController`, `HealthController` | 🟡 |
 | `rest/dto` | Внешний контракт API отдельно от доменных сущностей | ⚠️ |
-| `rest/filters` | Извлечение пользователя из токена, проверка аутентификации | ⚠️ |
+| Аутентификация | `@Public` + проверка токена в `RouterScanner` (`infrastructure/http`, `infrastructure/security`) | ✅ |
 | `rest/exception` | Обработка исключений на границе HTTP | ⚠️ |
 
-> `rest/filters` пуст — от этого блока зависят QG-01 и AR-02 (см. 4.4).
 
 ### shared
 
