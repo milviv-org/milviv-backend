@@ -5,7 +5,7 @@ import java.sql.Statement;
 
 /**
  * Таблицы пользователей (только нужные колонки), целей, проектов, задач, планов, наград и баллов для H2.
- * Повторяют V1, V2, V3, V4, V7, V9, V10, V11, V12 (со стандартными вопросами), V13, V14 (ai_consents)
+ * Повторяют V1, V2, V3, V4, V7, V9, V10, V11, V12 (со стандартными вопросами), V13, V14 (ai_consents, ai_requests без JSONB и частичного индекса), V16
  * без возможностей PostgreSQL; внешние ключи с ON DELETE SET NULL сохранены.
  */
 final class H2WorkSchema {
@@ -67,6 +67,17 @@ final class H2WorkSchema {
         st.execute("""
             CREATE TABLE ai_consents (
                 user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, accepted_at TIMESTAMP NOT NULL)""");
+        st.execute("""
+            CREATE TABLE ai_requests (
+                id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                status VARCHAR(30) NOT NULL, idempotency_key VARCHAR(100) NOT NULL, request_hash VARCHAR(64) NOT NULL,
+                message_length INTEGER NOT NULL, message_hash VARCHAR(64) NOT NULL, answer TEXT,
+                clarification_question TEXT, refusal_reason VARCHAR(30), error_code VARCHAR(50),
+                contract_version VARCHAR(30) NOT NULL, prompt_version VARCHAR(50) NOT NULL,
+                provider VARCHAR(30) NOT NULL, model VARCHAR(100) NOT NULL, ai_calls INTEGER NOT NULL DEFAULT 0,
+                data_rounds INTEGER NOT NULL DEFAULT 0, input_tokens INTEGER, output_tokens INTEGER, latency_ms INTEGER,
+                version BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMP, expires_at TIMESTAMP, executed_at TIMESTAMP,
+                UNIQUE (user_id, idempotency_key))""");
         st.execute("""
             CREATE TABLE user_sound_settings (
                 user_id UUID NOT NULL, event VARCHAR(50) NOT NULL, sound VARCHAR(100) NOT NULL,

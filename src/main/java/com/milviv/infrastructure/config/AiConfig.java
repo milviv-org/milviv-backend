@@ -47,6 +47,8 @@ public class AiConfig {
                 positive(config, "AI_DESCRIPTION_MAX_LENGTH", "ai.description.max.length", 1000),
                 positive(config, "AI_SUMMARY_MAX_LENGTH", "ai.summary.max.length", 500),
                 positive(config, "AI_ANSWER_MAX_LENGTH", "ai.answer.max.length", 2000),
+                positive(config, "AI_CLARIFICATION_MAX_LENGTH", "ai.clarification.max.length", 300),
+                positive(config, "AI_DATA_REQUEST_REASON_MAX_LENGTH", "ai.data.request.reason.max.length", 200),
                 positive(config, "AI_DATE_HORIZON_YEARS", "ai.date.horizon.years", 2),
                 positive(config, "AI_REWARD_COST_MAX", "ai.reward.cost.max", 100_000));
 

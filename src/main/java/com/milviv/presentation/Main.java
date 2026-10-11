@@ -16,8 +16,11 @@ import com.milviv.application.auth.RefreshSession;
 import com.milviv.application.auth.RegisterUser;
 import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.application.ai.AiAssistantPort;
 import com.milviv.application.ai.AiConsentService;
 import com.milviv.application.ai.AiLimits;
+import com.milviv.application.ai.AiTurnValidator;
+import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.application.gamification.HiddenRewardsAccess;
 import com.milviv.application.gamification.PointsQueries;
 import com.milviv.application.gamification.RewardCommands;
@@ -38,6 +41,7 @@ import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
 import com.milviv.domain.ai.AiConsentRepository;
+import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.gamification.HiddenRewardsPasswordRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
 import com.milviv.domain.gamification.RewardRepository;
@@ -74,7 +78,9 @@ import com.milviv.infrastructure.persistence.DatabaseConnectionManager;
 import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
+import com.milviv.infrastructure.ai.UnavailableAiAssistant;
 import com.milviv.infrastructure.persistence.jdbc.AiConsentJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.AiRequestJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
@@ -99,6 +105,7 @@ import com.milviv.infrastructure.security.InMemoryLoginAttemptLimiter;
 import com.milviv.infrastructure.security.JwtAccessTokenService;
 import com.milviv.infrastructure.security.JwtCookieAuthenticator;
 import com.milviv.presentation.rest.controllers.AiConsentController;
+import com.milviv.presentation.rest.controllers.AiRequestController;
 import com.milviv.presentation.rest.controllers.AuthController;
 import com.milviv.presentation.rest.controllers.CalendarController;
 import com.milviv.presentation.rest.controllers.GoalController;
@@ -229,7 +236,13 @@ public class Main {
             // AI
             container.singletone(AiLimits.class, container.get(AiConfig.class).toLimits());
             container.singletone(AiConsentRepository.class, new AiConsentJdbcRepository(connectionProvider));
-            container.register(AiConsentService.class);
+            container.singletone(AiRequestRepository.class, new AiRequestJdbcRepository(connectionProvider));
+            // настоящий провайдер — с адаптером Gemini (9.6); до тех пор AI-запросы отвечают 503
+            container.singletone(AiAssistantPort.class, new UnavailableAiAssistant());
+            container
+                    .register(AiConsentService.class)
+                    .register(AiTurnValidator.class)
+                    .register(HandleAiRequest.class);
 
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
@@ -270,6 +283,7 @@ public class Main {
                     StatisticsController.class,
                     SoundSettingsController.class,
                     AiConsentController.class,
+                    AiRequestController.class,
                     HealthController.class
             );
 

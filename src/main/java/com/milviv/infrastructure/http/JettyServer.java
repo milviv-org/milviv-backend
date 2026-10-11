@@ -1,7 +1,10 @@
 package com.milviv.infrastructure.http;
 
 import org.eclipse.jetty.server.Server;
+import java.util.concurrent.Executors;
+
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +18,11 @@ public class JettyServer {
     private final Server server;
 
     public JettyServer(AppConfig config, Router router) {
-        server = new Server();
+        // Запрос к AI держит поток до 90 с (§5): обработка запросов — на виртуальных потоках,
+        // ожидание ответа провайдера не занимает платформенный поток из пула
+        QueuedThreadPool threadPool = new QueuedThreadPool();
+        threadPool.setVirtualThreadsExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        server = new Server(threadPool);
 
         ServerConnector connector = new ServerConnector(server);
         connector.setHost(config.getServerHost());

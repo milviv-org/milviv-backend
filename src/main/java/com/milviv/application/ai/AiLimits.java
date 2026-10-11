@@ -42,6 +42,8 @@ public record AiLimits(Request request, Data data, Plan plan) {
             int descriptionMaxLength,
             int summaryMaxLength,
             int answerMaxLength,
+            int clarificationMaxLength,
+            int dataRequestReasonMaxLength,
             int dateHorizonYears,
             int rewardCostMax
     ) {}

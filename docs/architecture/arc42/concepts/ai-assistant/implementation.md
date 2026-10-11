@@ -9,12 +9,12 @@
 | # | Подэтап | Что появляется | Статус |
 |---|---------|----------------|--------|
 | 9.1 | Согласие и конфиг | `ai_consents`, `GET/POST /ai/consent`, проверка согласия, `AiConfig` со всеми лимитами [§8](limits-and-security.md) | ✅ |
-| 9.2 | Каркас запроса | `AiRequest` (состояния, идемпотентность, один активный запрос), `AiAssistantPort` + `FakeAiAssistant`, `HandleAiRequest` для исходов `ANSWER` / `CLARIFICATION_NEEDED` / `REFUSED`, `POST /ai/requests`, `GET /ai/requests/{id}` | ⏳ |
+| 9.2 | Каркас запроса | `AiRequest` (состояния, идемпотентность, один активный запрос), `AiAssistantPort` + `FakeAiAssistant`, `HandleAiRequest` для исходов `ANSWER` / `CLARIFICATION_NEEDED` / `REFUSED`, `POST /ai/requests`, `GET /ai/requests/{id}`, зависшие `PENDING_AI` | ✅ |
 | 9.3 | Создания | Создающая часть `PlanDraft`, `AiResponseValidator` + `AiPolicy`, `ExecuteAiPlan` (фаза 1 через ручные сценарии, одна транзакция), `OperationReportBuilder` | ⏳ |
 | 9.4 | Каталог данных | `AiDataCatalog` (6 запросов, проекции, урезание, без скрытых наград), `HandleRegistry` (дескрипторы с версией), цикл ≤ 2 раундов, журнал прочитанного, создание внутри существующих целей и проектов | ⏳ |
 | 9.5 | Изменения и удаления | Изменения и удаления в плане, `PreviewBuilder`, `PROPOSED`, `POST /ai/requests/{id}/execution` и `/rejection`, сверка версий (`TARGET_CHANGED`), правила дат на итоговом состоянии, TTL | ⏳ |
 | 9.6 | Адаптер Gemini | Провайдерские ключи `AiConfig`, JDK `HttpClient`, промпт `assistant@1`, схема ответа, строгий разбор, таймауты, ретраи, `AiFailure`; тесты на HTTP-заглушке; онлайн-прогон ~25 сообщений (п. 10 [§17](README.md#17-final-architecture)) | ⏳ |
-| 9.7 | Квоты и предохранитель | Лимиты на пользователя (сутки, минута, созданий в сутки), предохранитель квоты провайдера, зависшие `PENDING_AI` | ⏳ |
+| 9.7 | Квоты и предохранитель | Лимиты на пользователя (сутки, минута, созданий в сутки), предохранитель квоты провайдера | ⏳ |
 | 9.8 | Память AI | `ai_memories`. В концепции не описана — только в пользовательской доке; проектируется отдельно | ⏳ |
 
 Порядок — из [§17](README.md#17-final-architecture): пункты 1–3 (аутентификация, миграции, ручные CRUD) сделаны этапами 1–6; пункт 5 разбит на 9.2 и 9.3; пункт 10 (онлайн-прогон) входит в 9.6. До 9.6 настоящего провайдера нет: всё проверяется на `FakeAiAssistant`.
@@ -168,3 +168,194 @@ POST /ai/consent   → 201 { "accepted": true, "acceptedAt": "2026-10-11T12:00:0
 - H2: запись и чтение; изоляция пользователей; повторная вставка не падает.
 - `AiConfig`: дефолты; переопределение; отказ при нуле, отрицательном значении, `min > max`.
 - `HttpStatusResolver`: `AI_CONSENT_REQUIRED` → 403.
+
+---
+
+## 9.2 Каркас запроса ✅
+
+**Задача.** Пользователь отправляет сообщение → сервер проверяет согласие и повтор → спрашивает AI вне транзакции → сохраняет итог. В этом подэтапе AI умеет только **ответить текстом**, **задать уточняющий вопрос** или **отказаться**. Запросы данных, планы и исполнение — в 9.3–9.5.
+
+**В подэтап не входит:** квоты на пользователя и предохранитель (9.7), настоящий провайдер (9.6), JSONB-поля `handles`, `plan`, `decision`, `result`, `data_access_log` (9.3–9.5).
+
+### Классы
+
+| Класс | Слой | Ответственность |
+|-------|------|-----------------|
+| `AiRequestController` | presentation | `POST /ai/requests` (заголовок `Idempotency-Key`), `GET /ai/requests`, `GET /ai/requests/{id}` |
+| `HandleAiRequest` | application/ai | Фаза 1: согласие → повтор и активный запрос → цикл вызовов AI → проверка хода → итог |
+| `AiRequestView` | application/ai | Ответ клиенту: `requestId`, `status`, `answer`, `clarificationQuestion`, `errorCode`, `createdAt` |
+| `AiAssistantPort` | application/ai | Интерфейс провайдера: `provider()`, `model()`, `nextTurn(AiPrompt)` |
+| `AiPrompt` | application/ai | Что уходит AI: версии контракта и промпта, `today`, `timezone`, `locale`, сообщение, номер вызова, замечания к прошлому ходу |
+| `AiTurn` | application/ai/contract | sealed: `Answer`, `ClarificationNeeded`, `Refused`. В 9.3–9.4 добавятся `Proposal`, `DataRequest` |
+| `AiReply` | application/ai | Ход + расход токенов |
+| `AiProviderException` | application/ai | Сбой провайдера: `UNAVAILABLE`, `TIMEOUT`, `MALFORMED` (полный `AiFailure` — в 9.6) |
+| `AiTurnValidator` | application/ai | Длины и пустые поля хода → список замечаний |
+| `UnavailableAiAssistant` | infrastructure/ai | Провайдер до 9.6: всегда `UNAVAILABLE` → `503` |
+| `AiRequest` | domain/ai | Агрегат: статус, хеши, версии, счётчики, ответ; переходы состояний |
+| `AiRequestStatus` | domain/ai | 8 статусов из V14 |
+| `AiRequestRepository` | domain/ai | Хранение с фильтром `user_id` |
+| `AiRequestException` | domain/exception | Ошибки AI с кодом из [§11](reliability.md) |
+| `AiRequestJdbcRepository` | infrastructure/persistence | Таблица `ai_requests` |
+| `FakeAiAssistant` | test | Заранее заданная очередь ходов или сбоев |
+
+### Схема связей
+
+```mermaid
+classDiagram
+    direction LR
+
+    class AiRequestController {
+        +create(ctx)
+        +list(ctx)
+        +get(ctx)
+    }
+    class HandleAiRequest {
+        +execute(userId, idempotencyKey, message) Result
+        +get(userId, requestId) AiRequestView
+        +list(userId, limit, offset)
+    }
+    class AiConsentService {
+        +requireConsent(userId)
+    }
+    class AiLimits {
+        <<record>>
+    }
+    class AiAssistantPort {
+        <<interface>>
+        +provider() String
+        +model() String
+        +nextTurn(prompt) AiReply
+    }
+    class AiTurn {
+        <<sealed>>
+    }
+    class Answer
+    class ClarificationNeeded
+    class Refused
+    class AiTurnValidator {
+        +validate(turn) List~String~
+    }
+    class AiRequest {
+        +start(...)
+        +answered(text, usage)
+        +clarificationNeeded(text, usage)
+        +refused(reason, usage)
+        +failed(code, usage)
+        +isStale(now, timeout) boolean
+    }
+    class AiRequestRepository {
+        <<interface>>
+    }
+    class AiRequestJdbcRepository
+    class UnavailableAiAssistant
+    class FakeAiAssistant {
+        <<test>>
+    }
+
+    AiRequestController --> HandleAiRequest
+    HandleAiRequest --> AiConsentService
+    HandleAiRequest --> AiLimits
+    HandleAiRequest --> AiAssistantPort
+    HandleAiRequest --> AiTurnValidator
+    HandleAiRequest --> AiRequestRepository
+    HandleAiRequest ..> AiRequest : создаёт и меняет
+    AiAssistantPort ..> AiTurn : возвращает
+    Answer --|> AiTurn
+    ClarificationNeeded --|> AiTurn
+    Refused --|> AiTurn
+    AiRequestJdbcRepository ..|> AiRequestRepository
+    UnavailableAiAssistant ..|> AiAssistantPort
+    FakeAiAssistant ..|> AiAssistantPort
+```
+
+### Состояния в 9.2
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING_AI : POST /ai/requests
+    PENDING_AI --> ANSWERED : Answer
+    PENDING_AI --> NEEDS_CLARIFICATION : ClarificationNeeded
+    PENDING_AI --> FAILED : Refused, сбой провайдера, неверный ход, таймаут
+    PENDING_AI --> FAILED : завис дольше таймаута запроса
+```
+
+`EXECUTED`, `PROPOSED`, `REJECTED`, `EXPIRED` появятся в 9.3 и 9.5.
+
+### Как работает `POST /ai/requests`
+
+1. `requireConsent` → иначе `403 AI_CONSENT_REQUIRED`, ничего не записано.
+2. Сообщение: не пустое, ≤ `messageMaxLength` → иначе `400`.
+3. **Транзакция 1** (короткая):
+   1. блокируется строка пользователя — запросы одного пользователя идут по очереди (тот же приём, что в 9.1);
+   2. есть запрос с этим `Idempotency-Key`:
+      - хеш тела другой → `422 IDEMPOTENCY_KEY_REUSED`;
+      - `PENDING_AI` → `409 AI_REQUEST_IN_PROGRESS`;
+      - завершён → **повтор**: тот же ответ, AI не вызывается;
+   3. есть другой `PENDING_AI`: завис (старше `requestTimeout`) → `FAILED AI_TIMEOUT`; иначе → `409 AI_REQUEST_IN_PROGRESS`;
+   4. новый `AiRequest` в `PENDING_AI`.
+4. **Вне транзакции** — вызовы AI (AD-08), не больше `maxCallsPerRequest`:
+   - ход прошёл `AiTurnValidator` → итог;
+   - ход не прошёл → ещё один вызов с замечаниями; не прошёл снова → `FAILED AI_INVALID_RESPONSE` ([§7.1](user-flow.md));
+   - `DataRequest` или `Proposal` в 9.2 невозможны: в `AiTurn` их ещё нет;
+   - сбой провайдера → `FAILED` с кодом; истёк `requestTimeout` → `FAILED AI_TIMEOUT`.
+5. **Транзакция 2:** итог записывается условным `UPDATE … WHERE status = 'PENDING_AI' AND version = ?`.
+6. Ответ: `ANSWERED` / `NEEDS_CLARIFICATION` → `201`; повтор → `200`; `FAILED` → ошибка с кодом запроса (повтор возвращает ту же ошибку).
+
+Сырое сообщение не хранится: только длина и SHA-256 ([§13](data.md)).
+
+### API
+
+```http
+POST /ai/requests
+Idempotency-Key: 5b0c2c0e-…
+{ "message": "Какие задачи я чаще всего просрочиваю?" }
+
+→ 201 { "requestId": "7f9e…", "status": "ANSWERED", "answer": "…", "clarificationQuestion": null,
+        "errorCode": null, "createdAt": "…" }
+
+GET /ai/requests?limit=&offset=   → 200 { "items": [ … ] }   новые первыми
+GET /ai/requests/{id}             → 200 …                    чужой → 404
+```
+
+| Код | HTTP | Когда |
+|-----|------|-------|
+| `AI_REQUEST_IN_PROGRESS` | 409 | Уже идёт другой запрос или этот же |
+| `IDEMPOTENCY_KEY_REUSED` | 422 | Ключ уже использован с другим сообщением |
+| `AI_PROVIDER_UNAVAILABLE` | 503 | Провайдер недоступен — до 9.6 всегда |
+| `AI_TIMEOUT` | 504 | AI не ответил за `requestTimeout` |
+| `AI_INVALID_RESPONSE` | 502 | Ход дважды не прошёл проверку |
+| `AI_REFUSED` | 422 | AI отказался: `OFF_TOPIC`, `UNSUPPORTED_OPERATION`, `OTHER` |
+
+### Решения на подтверждение
+
+1. **Миграция V16:** колонки `clarification_question TEXT` и `refusal_reason VARCHAR(30)` в `ai_requests`. В V14 для них места нет: статуса `REFUSED` нет, а `answer` по концепции — только для ответа. Отказ хранится как `FAILED` + `error_code = AI_REFUSED` + `refusal_reason` — так он остаётся ошибкой `422`, как в [§11](reliability.md). Альтернатива без миграции — класть вопрос в `answer`, а причину отказа — в `error_code` (`AI_REFUSED_OFF_TOPIC`), но это смешивает смыслы колонок.
+2. **Зависшие `PENDING_AI` — в 9.2, а не в 9.7.** Если сервер упадёт во время вызова AI, запрос останется `PENDING_AI`, и пользователь больше никогда не сможет отправить новый: мешает правило «один активный запрос».
+3. **До 9.6 в рабочем приложении стоит `UnavailableAiAssistant`.** `POST /ai/requests` проверяет согласие, записывает запрос и отвечает `503 AI_PROVIDER_UNAVAILABLE`. Всё остальное проверяется тестами на `FakeAiAssistant`.
+4. **Новые лимиты в `AiLimits`:** `clarificationMaxLength` = 300 и `dataRequestReasonMaxLength` = 200 из [§6.2](contract.md) — в 9.1 я их пропустил.
+5. **`GET /ai/requests` — история запросов.** В концепции явного списка нет, но [§6.7](user-flow.md) говорит о «повторном открытии истории».
+6. **`Idempotency-Key` обязателен:** 1–100 символов, латиница, цифры, `-`, `_`. Без него → `400`.
+7. **`timezone` = `UTC`, `locale` = `ru-RU`** в `AiPrompt` (K-4).
+8. **Jetty на виртуальных потоках:** фаза 1 держит HTTP-поток до 90 с ([§5](architecture.md), TO-12). Jetty 11.0.26 это поддерживает (`QueuedThreadPool.setVirtualThreadsExecutor`); включаю для всего сервера.
+
+### Сверка с кодом (после реализации)
+
+- Классы, связи и состояния — как в схемах. API — [ai-api.md](../../../../rest-api/ai-api.md). Решения 1–8 приняты; V16 — `V16__ai_request_outcome.sql`.
+- **Согласие проверяется и в `GET /ai/requests*`**, а не только в `POST`: концепция закрывает без согласия все `/ai/requests*` ([§6.10](user-flow.md)).
+- **Транзакция 3 перечитывает запрос.** Пока шёл вызов AI, его могли признать зависшим — тогда итог AI не записывается, остаётся уже сохранённый `FAILED`. Без перечитывания `RetryableTransactionManager` повторял бы обновление устаревшего объекта.
+- **`MALFORMED` от провайдера** считается неверным ходом: один повтор с замечанием `response: MALFORMED`.
+- **`FakeAiAssistant`** — в тестах (`unit/application/ai`), умеет действие «во время вызова»: сдвинуть часы или отправить параллельный запрос.
+- **Не проверено:** запуск сервера на виртуальных потоках — приложение целиком не запускалось; частичный уникальный индекс V14 на H2 не воспроизводится (защищает блокировка пользователя).
+
+### Тесты
+
+- `AiRequest`: переходы только из `PENDING_AI`; зависший определяется по `createdAt` и таймауту.
+- `AiTurnValidator`: пустой и слишком длинный ответ, вопрос, неизвестная причина отказа.
+- `HandleAiRequest` на H2 + `FakeAiAssistant`:
+  - без согласия → `403`, провайдер не вызван, запрос не записан;
+  - `Answer` → `ANSWERED`; `ClarificationNeeded` → `NEEDS_CLARIFICATION`; `Refused` → `422 AI_REFUSED` и `FAILED`;
+  - повтор с тем же ключом → тот же результат, провайдер вызван один раз; с другим телом → `422`;
+  - второй запрос, пока первый `PENDING_AI` → `409`; зависший → `FAILED`, новый проходит;
+  - неверный ход → повтор с замечаниями → успех; дважды неверный → `502`; сбой провайдера → `503`;
+  - превышение `maxCallsPerRequest` и `requestTimeout`;
+  - чужой запрос → `404`; в БД нет текста сообщения.
+- `HttpStatusResolver`: все новые коды.

@@ -29,7 +29,7 @@
 | [reflection_answers](#reflection_answers) | Ответы рефлексии | V12 |
 | [user_sound_settings](#user_sound_settings) | Звуки событий | V13 |
 | [ai_consents](#ai_consents) | Согласие на использование данных AI | V14 |
-| [ai_requests](#ai_requests) | Запросы к AI | V14 |
+| [ai_requests](#ai_requests) | Запросы к AI | V14, V16 |
 | [ai_memories](#ai_memories) | Память AI | V14 |
 | [audit_log](#audit_log) | Журнал действий | V5 |
 | [error_log](#error_log) | Журнал ошибок | V6 |
@@ -263,9 +263,11 @@ Refresh-токены сессий входа. Хранится только хе
 | `decision` | JSONB | Подтверждённые пользователем изменения и удаления |
 | `result` | JSONB | Отчёт об операциях |
 | `answer` | TEXT | Текстовый ответ AI |
+| `clarification_question` | TEXT | Уточняющий вопрос AI (`NEEDS_CLARIFICATION`) |
+| `refusal_reason` | VARCHAR(30) | Почему AI отказался: `OFF_TOPIC`, `UNSUPPORTED_OPERATION`, `OTHER`. Отказ — `FAILED` + `error_code = AI_REFUSED` |
 | `contract_version`, `prompt_version` | VARCHAR | Версии контракта и промпта |
 | `provider`, `model` | VARCHAR | Провайдер и модель AI |
-| `error_code` | VARCHAR(50) | Код ошибки, если запрос не удался |
+| `error_code` | VARCHAR(50) | Код ошибки, если запрос не удался; повтор с тем же ключом возвращает ту же ошибку |
 | `ai_calls`, `data_rounds` | INTEGER | Вызовов AI, раундов запроса данных |
 | `input_tokens`, `output_tokens` | INTEGER | Токены |
 | `latency_ms` | INTEGER | Длительность |
