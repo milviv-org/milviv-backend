@@ -12,6 +12,7 @@
 | Награды и баллы | [rewards-api.md](rewards-api.md) |
 | Рефлексия | [reflection-api.md](reflection-api.md) |
 | Статистика | [statistics-api.md](statistics-api.md) |
+| Звуки | [sounds-api.md](sounds-api.md) |
 
 ## Общие правила
 

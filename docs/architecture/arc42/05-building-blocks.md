@@ -74,7 +74,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `transaction` | `TransactionManager`, `Propagation`, `IsolationLevel` | ✅ |
-| Сценарии предметных областей | По одному пакету на область | 🟡 все, кроме sound и ai |
+| Сценарии предметных областей | По одному пакету на область | 🟡 все, кроме ai |
 
 ### infrastructure
 
@@ -99,7 +99,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `Main` | Composition root | ✅ |
-| `rest/controllers` | `AuthController`, `GoalController`, `ProjectController`, `TaskController`, `PlanController`, `CalendarController`, `RewardController`, `PointsController`, `ReflectionController`, `StatisticsController`, `HealthController` | 🟡 |
+| `rest/controllers` | `AuthController`, `GoalController`, `ProjectController`, `TaskController`, `PlanController`, `CalendarController`, `RewardController`, `PointsController`, `ReflectionController`, `StatisticsController`, `SoundSettingsController`, `HealthController` | 🟡 |
 | `rest/dto` | Внешний контракт API отдельно от доменных сущностей | ⚠️ |
 | Аутентификация | `@Public` + проверка токена в `RouterScanner` (`infrastructure/http`, `infrastructure/security`) | ✅ |
 | `rest/exception` | Обработка исключений на границе HTTP | ⚠️ |
@@ -117,6 +117,6 @@ presentation  →  infrastructure  →  application  →  domain
 
 ## 5.3 Текущее состояние
 
-Реализованы инфраструктурный слой и срезы: аутентификация, цели, проекты, задачи с начислением баллов, планирование и календарь, награды и баланс, рефлексия, статистика. Остальные предметные области существуют как решение о декомпозиции, зафиксированное выше.
+Реализованы инфраструктурный слой и срезы: аутентификация, цели, проекты, задачи с начислением баллов, планирование и календарь, награды и баланс, рефлексия, статистика, звуки. Остальные предметные области существуют как решение о декомпозиции, зафиксированное выше.
 
 Схема БД опережает код: миграции V1–V15 создают таблицы всех предметных областей, код есть у `users`, `refresh_tokens`, `goals`, `projects`, `tasks`, `plans`, `task_completions`, `task_reschedules`, `points_history`, `rewards`, таблицы рефлексии. Список таблиц и колонок — [database.md](../database.md).

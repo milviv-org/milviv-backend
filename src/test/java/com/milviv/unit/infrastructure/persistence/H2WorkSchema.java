@@ -5,7 +5,7 @@ import java.sql.Statement;
 
 /**
  * Таблицы пользователей (только нужные колонки), целей, проектов, задач, планов, наград и баллов для H2.
- * Повторяют V1, V2, V3, V4, V7, V9, V10, V11, V12 (со стандартными вопросами)
+ * Повторяют V1, V2, V3, V4, V7, V9, V10, V11, V12 (со стандартными вопросами), V13
  * без возможностей PostgreSQL; внешние ключи с ON DELETE SET NULL сохранены.
  */
 final class H2WorkSchema {
@@ -64,6 +64,10 @@ final class H2WorkSchema {
                 amount INTEGER NOT NULL, reason VARCHAR(255) NOT NULL,
                 task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
                 reward_id UUID REFERENCES rewards(id) ON DELETE SET NULL, created_at TIMESTAMP)""");
+        st.execute("""
+            CREATE TABLE user_sound_settings (
+                user_id UUID NOT NULL, event VARCHAR(50) NOT NULL, sound VARCHAR(100) NOT NULL,
+                PRIMARY KEY (user_id, event))""");
         st.execute("""
             CREATE TABLE reflection_questions (
                 id UUID PRIMARY KEY, user_id UUID, text VARCHAR(500) NOT NULL, created_at TIMESTAMP)""");

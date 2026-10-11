@@ -28,6 +28,7 @@ import com.milviv.application.project.ProjectCommands;
 import com.milviv.application.reflection.ReflectionPolicy;
 import com.milviv.application.reflection.ReflectionQuestionCommands;
 import com.milviv.application.reflection.TaskReflectionCommands;
+import com.milviv.application.sound.SoundSettings;
 import com.milviv.application.statistics.StatisticsPolicy;
 import com.milviv.application.statistics.StatisticsQueries;
 import com.milviv.application.task.CompleteTask;
@@ -44,6 +45,7 @@ import com.milviv.domain.project.ProjectRepository;
 import com.milviv.domain.reflection.ReflectionAnswerRepository;
 import com.milviv.domain.reflection.ReflectionQuestionRepository;
 import com.milviv.domain.reflection.TaskReflectionRepository;
+import com.milviv.domain.sound.SoundSettingsRepository;
 import com.milviv.domain.statistics.StatisticsRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
@@ -76,6 +78,7 @@ import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ReflectionAnswerJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ReflectionQuestionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RewardJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.SoundSettingsJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.StatisticsJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
@@ -98,6 +101,7 @@ import com.milviv.presentation.rest.controllers.PlanController;
 import com.milviv.presentation.rest.controllers.PointsController;
 import com.milviv.presentation.rest.controllers.ReflectionController;
 import com.milviv.presentation.rest.controllers.RewardController;
+import com.milviv.presentation.rest.controllers.SoundSettingsController;
 import com.milviv.presentation.rest.controllers.StatisticsController;
 import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
@@ -211,6 +215,10 @@ public class Main {
             container.singletone(StatisticsPolicy.class, container.get(StatisticsConfig.class).toPolicy());
             container.register(StatisticsQueries.class);
 
+            // Звуки
+            container.singletone(SoundSettingsRepository.class, new SoundSettingsJdbcRepository(connectionProvider));
+            container.register(SoundSettings.class);
+
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
             // ═══════════════════════════════════════════════════════════
@@ -248,6 +256,7 @@ public class Main {
                     PointsController.class,
                     ReflectionController.class,
                     StatisticsController.class,
+                    SoundSettingsController.class,
                     HealthController.class
             );
 
