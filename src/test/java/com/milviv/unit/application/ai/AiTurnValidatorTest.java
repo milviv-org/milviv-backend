@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 import com.milviv.application.ai.AiLimits;
+import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.AiTurnValidator;
 import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.domain.ai.RefusalReason;
@@ -25,23 +26,27 @@ class AiTurnValidatorTest {
     }
 
     /** Длины ответа и вопроса уменьшены, чтобы проверять предел. */
-    private final AiTurnValidator validator = new AiTurnValidator(limits(4, Duration.ofSeconds(90), 20, 10));
+    private final AiTurnValidator validator = new AiTurnValidator(limits(4, Duration.ofSeconds(90), 20, 10), new AiPlanPolicy(limits(4, Duration.ofSeconds(90), 20, 10)));
+
+    private java.util.List<String> validate(AiTurn turn) {
+        return validator.validate(turn, java.time.LocalDate.parse("2026-10-11")).violations();
+    }
 
     @Test
     void validTurns_haveNoViolations() {
-        assertThat(validator.validate(new AiTurn.Answer("Готово"))).isEmpty();
-        assertThat(validator.validate(new AiTurn.ClarificationNeeded("Какой?"))).isEmpty();
-        assertThat(validator.validate(new AiTurn.Refused(RefusalReason.OFF_TOPIC))).isEmpty();
+        assertThat(validate(new AiTurn.Answer("Готово"))).isEmpty();
+        assertThat(validate(new AiTurn.ClarificationNeeded("Какой?"))).isEmpty();
+        assertThat(validate(new AiTurn.Refused(RefusalReason.OFF_TOPIC))).isEmpty();
     }
 
     @Test
     void emptyOrTooLong_areViolations() {
-        assertThat(validator.validate(new AiTurn.Answer(" "))).containsExactly("answer: REQUIRED");
-        assertThat(validator.validate(new AiTurn.Answer("x".repeat(21)))).containsExactly("answer: MAX_LENGTH(20)");
-        assertThat(validator.validate(new AiTurn.ClarificationNeeded(null))).containsExactly("clarificationQuestion: REQUIRED");
-        assertThat(validator.validate(new AiTurn.ClarificationNeeded("x".repeat(11))))
+        assertThat(validate(new AiTurn.Answer(" "))).containsExactly("answer: REQUIRED");
+        assertThat(validate(new AiTurn.Answer("x".repeat(21)))).containsExactly("answer: MAX_LENGTH(20)");
+        assertThat(validate(new AiTurn.ClarificationNeeded(null))).containsExactly("clarificationQuestion: REQUIRED");
+        assertThat(validate(new AiTurn.ClarificationNeeded("x".repeat(11))))
                 .containsExactly("clarificationQuestion: MAX_LENGTH(10)");
-        assertThat(validator.validate(new AiTurn.Refused(null))).containsExactly("refusalReason: REQUIRED");
+        assertThat(validate(new AiTurn.Refused(null))).containsExactly("refusalReason: REQUIRED");
     }
 
     @Test

@@ -21,9 +21,11 @@ import com.milviv.application.transaction.TransactionManager;
 import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
+import com.milviv.domain.ai.OperationReport;
 import com.milviv.domain.ai.RefusalReason;
 import com.milviv.domain.exception.AiRequestException;
 import com.milviv.domain.exception.AiRequestException.Code;
+import com.milviv.domain.exception.DomainException;
 import com.milviv.domain.exception.NotFoundException;
 import com.milviv.domain.exception.ValidationException;
 
@@ -35,7 +37,8 @@ import com.milviv.domain.exception.ValidationException;
  * 2. вызовы AI — вне транзакции (AD-08, инвариант 9);
  * 3. tx: итог записывается, только если запрос всё ещё PENDING_AI.
  *
- * Сейчас AI отвечает, уточняет или отказывается. Запросы данных и планы — подэтапы 9.3–9.5.
+ * AI отвечает, уточняет, отказывается или предлагает создания — они исполняются сразу,
+ * в транзакции 3 (G-25). Запросы данных — 9.4, изменения и удаления — 9.5.
  */
 public class HandleAiRequest {
 
@@ -50,17 +53,19 @@ public class HandleAiRequest {
     private final AiConsentService consentService;
     private final AiAssistantPort assistant;
     private final AiTurnValidator validator;
+    private final ExecuteAiPlan executeAiPlan;
     private final AiRequestRepository requests;
     private final AiLimits limits;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public HandleAiRequest(AiConsentService consentService, AiAssistantPort assistant, AiTurnValidator validator,
-                           AiRequestRepository requests, AiLimits limits, TransactionManager transactionManager,
-                           Clock clock) {
+                           ExecuteAiPlan executeAiPlan, AiRequestRepository requests, AiLimits limits,
+                           TransactionManager transactionManager, Clock clock) {
         this.consentService = consentService;
         this.assistant = assistant;
         this.validator = validator;
+        this.executeAiPlan = executeAiPlan;
         this.requests = requests;
         this.limits = limits;
         this.transactionManager = transactionManager;
@@ -102,7 +107,14 @@ public class HandleAiRequest {
         }
 
         Outcome outcome = converse(message, startedAt);
-        AiRequest finished = transactionManager.execute(() -> finish(userId, start.request().getId(), outcome));
+        UUID requestId = start.request().getId();
+        AiRequest finished;
+        try {
+            finished = transactionManager.execute(() -> finish(userId, requestId, outcome));
+        } catch (DomainException ex) {
+            // правило домена нарушено при исполнении: созданное откатилось вместе с транзакцией (§10.1)
+            finished = transactionManager.execute(() -> fail(userId, requestId, Code.BUSINESS_RULE_VIOLATION, outcome.usage()));
+        }
         return result(finished, true);
     }
 
@@ -188,7 +200,7 @@ public class HandleAiRequest {
             calls++;
             try {
                 reply = assistant.nextTurn(new AiPrompt(AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION,
-                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft));
+                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, limits.plan()));
             } catch (AiProviderException ex) {
                 switch (ex.getKind()) {
                     case UNAVAILABLE -> { return failure(Code.AI_PROVIDER_UNAVAILABLE, calls, tokens, startedAt); }
@@ -212,10 +224,15 @@ public class HandleAiRequest {
             }
 
             AiTurn turn = validator.normalize(reply.turn());
-            List<String> found = validator.validate(turn);
-            if (found.isEmpty()) {
+            AiPlanPolicy.Verdict verdict = validator.validate(turn, today);
+            if (verdict.ok()) {
                 return new Outcome(turn, null, tokens.usage(calls, startedAt, clock.instant()));
             }
+            // слишком большой план не исправляется повтором — AI молча выбросил бы часть операций
+            if (verdict.tooLarge()) {
+                return failure(Code.AI_PLAN_TOO_LARGE, calls, tokens, startedAt);
+            }
+            List<String> found = verdict.violations();
             // один повтор с замечаниями; снова неверно → AI_INVALID_RESPONSE (§7.1)
             if (repaired) {
                 return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt);
@@ -266,9 +283,22 @@ public class HandleAiRequest {
                 case AiTurn.Answer a -> request.answered(a.answer(), outcome.usage());
                 case AiTurn.ClarificationNeeded c -> request.clarificationNeeded(c.clarificationQuestion(), outcome.usage());
                 case AiTurn.Refused r -> request.refused(r.refusalReason(), outcome.usage());
+                case AiTurn.Proposal p -> {
+                    OperationReport report = executeAiPlan.executeCreations(userId, p.plan().create());
+                    request.executed(p.summary(), p.answer(), report, outcome.usage(), clock.instant());
+                }
             }
         }
         requests.update(request);
+        return request;
+    }
+
+    private AiRequest fail(UUID userId, UUID requestId, Code code, AiRequest.Usage usage) {
+        AiRequest request = requests.findById(userId, requestId).orElseThrow();
+        if (request.isPending()) {
+            request.failed(code, usage);
+            requests.update(request);
+        }
         return request;
     }
 

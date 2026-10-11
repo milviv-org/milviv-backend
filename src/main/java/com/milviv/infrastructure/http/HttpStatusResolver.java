@@ -24,7 +24,9 @@ public class HttpStatusResolver {
             Map.entry("AI_PROVIDER_UNAVAILABLE", HttpServletResponse.SC_SERVICE_UNAVAILABLE),
             Map.entry("AI_TIMEOUT", HttpServletResponse.SC_GATEWAY_TIMEOUT),
             Map.entry("AI_INVALID_RESPONSE", HttpServletResponse.SC_BAD_GATEWAY),
-            Map.entry("AI_REFUSED", 422)
+            Map.entry("AI_REFUSED", 422),
+            Map.entry("AI_PLAN_TOO_LARGE", 422),
+            Map.entry("BUSINESS_RULE_VIOLATION", 422)
     );
 
     public int resolve(AppException e) {

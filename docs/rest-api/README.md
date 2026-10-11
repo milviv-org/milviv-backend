@@ -50,6 +50,8 @@
 | `AI_REQUEST_IN_PROGRESS` | 409 | Предыдущий AI-запрос ещё обрабатывается |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | `Idempotency-Key` уже использован с другим телом |
 | `AI_REFUSED` | 422 | AI отказался выполнять запрос |
+| `AI_PLAN_TOO_LARGE` | 422 | AI предложил больше операций, чем разрешено |
+| `BUSINESS_RULE_VIOLATION` | 422 | Операции AI нарушили правило домена; ничего не изменено |
 | `AI_INVALID_RESPONSE` | 502 | Ответ AI не удалось обработать |
 | `AI_PROVIDER_UNAVAILABLE` | 503 | AI временно недоступен |
 | `AI_TIMEOUT` | 504 | AI не ответил вовремя |

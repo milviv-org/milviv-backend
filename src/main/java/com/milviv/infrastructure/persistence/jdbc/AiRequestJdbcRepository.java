@@ -5,30 +5,44 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
+import com.milviv.domain.ai.OperationReport;
 import com.milviv.domain.ai.RefusalReason;
 import com.milviv.domain.exception.OptimisticLockException;
 import com.milviv.infrastructure.exception.DatabaseException;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 
-/** JSONB-колонки (handles, plan, decision, result, data_access_log) появятся в подэтапах 9.3–9.5. */
+/**
+ * result (отчёт) — JSONB, пишется через CAST(? AS JSONB). Остальные JSONB-колонки
+ * (handles, plan, decision, data_access_log) появятся в подэтапах 9.4–9.5.
+ */
 public class AiRequestJdbcRepository implements AiRequestRepository {
 
     private static final String COLUMNS = "id, user_id, status, idempotency_key, request_hash, message_length, "
-            + "message_hash, answer, clarification_question, refusal_reason, error_code, contract_version, "
-            + "prompt_version, provider, model, ai_calls, input_tokens, output_tokens, latency_ms, created_at, version";
+            + "message_hash, summary, answer, clarification_question, refusal_reason, error_code, contract_version, "
+            + "prompt_version, provider, model, ai_calls, input_tokens, output_tokens, latency_ms, result, created_at, "
+            + "executed_at, version";
+
+    private static final TypeReference<List<OperationReport.Item>> REPORT_ITEMS = new TypeReference<>() {};
 
     private final ConnectionProvider connectionProvider;
+    private final ObjectMapper objectMapper;
 
-    public AiRequestJdbcRepository(ConnectionProvider connectionProvider) {
+    public AiRequestJdbcRepository(ConnectionProvider connectionProvider, ObjectMapper objectMapper) {
         this.connectionProvider = connectionProvider;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -43,7 +57,8 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
 
     @Override
     public void add(AiRequest request) {
-        String sql = "INSERT INTO ai_requests (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO ai_requests (" + COLUMNS + ") VALUES "
+                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), ?, ?, ?)";
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
             ps.setObject(1, request.getId());
             ps.setObject(2, request.getUserId());
@@ -52,20 +67,23 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
             ps.setString(5, request.getRequestHash());
             ps.setInt(6, request.getMessageLength());
             ps.setString(7, request.getMessageHash());
-            ps.setString(8, request.getAnswer());
-            ps.setString(9, request.getClarificationQuestion());
-            ps.setString(10, name(request.getRefusalReason()));
-            ps.setString(11, request.getErrorCode());
-            ps.setString(12, request.getContractVersion());
-            ps.setString(13, request.getPromptVersion());
-            ps.setString(14, request.getProvider());
-            ps.setString(15, request.getModel());
-            ps.setInt(16, request.getAiCalls());
-            setInteger(ps, 17, request.getInputTokens());
-            setInteger(ps, 18, request.getOutputTokens());
-            setInteger(ps, 19, request.getLatencyMs());
-            ps.setTimestamp(20, Timestamp.from(request.getCreatedAt()));
-            ps.setLong(21, request.getVersion());
+            ps.setString(8, request.getSummary());
+            ps.setString(9, request.getAnswer());
+            ps.setString(10, request.getClarificationQuestion());
+            ps.setString(11, name(request.getRefusalReason()));
+            ps.setString(12, request.getErrorCode());
+            ps.setString(13, request.getContractVersion());
+            ps.setString(14, request.getPromptVersion());
+            ps.setString(15, request.getProvider());
+            ps.setString(16, request.getModel());
+            ps.setInt(17, request.getAiCalls());
+            setInteger(ps, 18, request.getInputTokens());
+            setInteger(ps, 19, request.getOutputTokens());
+            setInteger(ps, 20, request.getLatencyMs());
+            ps.setString(21, toJson(request.getReport()));
+            ps.setTimestamp(22, Timestamp.from(request.getCreatedAt()));
+            ps.setTimestamp(23, timestamp(request.getExecutedAt()));
+            ps.setLong(24, request.getVersion());
             ps.executeUpdate();
         } catch (SQLException ex) {
             throw new DatabaseException("Failed to insert AI request", ex);
@@ -116,23 +134,27 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
     public void update(AiRequest request) {
         String sql = """
             UPDATE ai_requests
-            SET status = ?, answer = ?, clarification_question = ?, refusal_reason = ?, error_code = ?,
-                ai_calls = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, version = version + 1
+            SET status = ?, summary = ?, answer = ?, clarification_question = ?, refusal_reason = ?, error_code = ?,
+                ai_calls = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, result = CAST(? AS JSONB),
+                executed_at = ?, version = version + 1
             WHERE id = ? AND user_id = ? AND version = ?
             """;
         try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
             ps.setString(1, request.getStatus().name());
-            ps.setString(2, request.getAnswer());
-            ps.setString(3, request.getClarificationQuestion());
-            ps.setString(4, name(request.getRefusalReason()));
-            ps.setString(5, request.getErrorCode());
-            ps.setInt(6, request.getAiCalls());
-            setInteger(ps, 7, request.getInputTokens());
-            setInteger(ps, 8, request.getOutputTokens());
-            setInteger(ps, 9, request.getLatencyMs());
-            ps.setObject(10, request.getId());
-            ps.setObject(11, request.getUserId());
-            ps.setLong(12, request.getVersion());
+            ps.setString(2, request.getSummary());
+            ps.setString(3, request.getAnswer());
+            ps.setString(4, request.getClarificationQuestion());
+            ps.setString(5, name(request.getRefusalReason()));
+            ps.setString(6, request.getErrorCode());
+            ps.setInt(7, request.getAiCalls());
+            setInteger(ps, 8, request.getInputTokens());
+            setInteger(ps, 9, request.getOutputTokens());
+            setInteger(ps, 10, request.getLatencyMs());
+            ps.setString(11, toJson(request.getReport()));
+            ps.setTimestamp(12, timestamp(request.getExecutedAt()));
+            ps.setObject(13, request.getId());
+            ps.setObject(14, request.getUserId());
+            ps.setLong(15, request.getVersion());
             if (ps.executeUpdate() == 0) {
                 throw new OptimisticLockException("AiRequest", request.getId(), request.getVersion());
             }
@@ -142,7 +164,7 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
         }
     }
 
-    private static List<AiRequest> list(PreparedStatement ps) throws SQLException {
+    private List<AiRequest> list(PreparedStatement ps) throws SQLException {
         try (ResultSet rs = ps.executeQuery()) {
             List<AiRequest> result = new ArrayList<>();
             while (rs.next()) {
@@ -155,6 +177,7 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
                         rs.getString("request_hash"),
                         rs.getInt("message_length"),
                         rs.getString("message_hash"),
+                        rs.getString("summary"),
                         rs.getString("answer"),
                         rs.getString("clarification_question"),
                         refusal == null ? null : RefusalReason.valueOf(refusal),
@@ -167,10 +190,34 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
                         rs.getObject("input_tokens", Integer.class),
                         rs.getObject("output_tokens", Integer.class),
                         rs.getObject("latency_ms", Integer.class),
+                        fromJson(rs.getString("result")),
                         rs.getTimestamp("created_at").toInstant(),
+                        instant(rs.getTimestamp("executed_at")),
                         rs.getLong("version")));
             }
             return result;
+        }
+    }
+
+    private String toJson(OperationReport report) {
+        if (report == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(report.items());
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize AI operation report", ex);
+        }
+    }
+
+    private OperationReport fromJson(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return new OperationReport(objectMapper.readValue(json, REPORT_ITEMS));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to read AI operation report", ex);
         }
     }
 
@@ -184,5 +231,13 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
         } else {
             ps.setInt(index, value);
         }
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
+    }
+
+    private static Instant instant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 }

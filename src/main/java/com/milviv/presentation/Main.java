@@ -19,6 +19,8 @@ import com.milviv.application.transaction.TransactionManager;
 import com.milviv.application.ai.AiAssistantPort;
 import com.milviv.application.ai.AiConsentService;
 import com.milviv.application.ai.AiLimits;
+import com.milviv.application.ai.AiPlanPolicy;
+import com.milviv.application.ai.ExecuteAiPlan;
 import com.milviv.application.ai.AiTurnValidator;
 import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.application.gamification.HiddenRewardsAccess;
@@ -236,12 +238,15 @@ public class Main {
             // AI
             container.singletone(AiLimits.class, container.get(AiConfig.class).toLimits());
             container.singletone(AiConsentRepository.class, new AiConsentJdbcRepository(connectionProvider));
-            container.singletone(AiRequestRepository.class, new AiRequestJdbcRepository(connectionProvider));
+            container.singletone(AiRequestRepository.class, new AiRequestJdbcRepository(connectionProvider,
+                    container.get(JacksonConfig.class).getObjectMapper()));
             // настоящий провайдер — с адаптером Gemini (9.6); до тех пор AI-запросы отвечают 503
             container.singletone(AiAssistantPort.class, new UnavailableAiAssistant());
             container
                     .register(AiConsentService.class)
+                    .register(AiPlanPolicy.class)
                     .register(AiTurnValidator.class)
+                    .register(ExecuteAiPlan.class)
                     .register(HandleAiRequest.class);
 
             // ═══════════════════════════════════════════════════════════

@@ -14,7 +14,9 @@ public class AiRequestException extends DomainException {
         AI_PROVIDER_UNAVAILABLE("AI временно недоступен"),
         AI_TIMEOUT("AI не ответил вовремя"),
         AI_INVALID_RESPONSE("Не удалось обработать запрос, попробуйте переформулировать"),
-        AI_REFUSED("AI не может выполнить этот запрос");
+        AI_REFUSED("AI не может выполнить этот запрос"),
+        AI_PLAN_TOO_LARGE("Слишком много изменений за раз — уточните запрос"),
+        BUSINESS_RULE_VIOLATION("Предложение AI нарушает правила. Ничего не изменено");
 
         private final String message;
 

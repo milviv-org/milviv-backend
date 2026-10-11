@@ -22,14 +22,16 @@ public interface AiAssistantPort {
     AiReply nextTurn(AiPrompt prompt);
 
     /**
-     * Что уходит AI (§6.1). Каталог и лимиты добавятся вместе с запросами данных и планами.
+     * Что уходит AI (§6.1). Каталог сложностей адаптер берёт из Difficulty; каталог данных — в 9.4.
      *
+     * @param limits     лимиты плана — подсказка модели; соблюдение проверяет сервер
      * @param call       номер вызова в этом запросе, с 1
      * @param violations замечания к прошлому ходу — AI должен их исправить; пусто — первый ход
      * @param timeLeft   сколько осталось до таймаута всего запроса
      */
     record AiPrompt(String contractVersion, String promptVersion, String locale, String timezone, LocalDate today,
-                    String userMessage, int call, List<String> violations, Duration timeLeft) {}
+                    String userMessage, int call, List<String> violations, Duration timeLeft,
+                    AiLimits.Plan limits) {}
 
     /** Токены null — провайдер их не сообщил. */
     record AiReply(AiTurn turn, Integer inputTokens, Integer outputTokens) {}

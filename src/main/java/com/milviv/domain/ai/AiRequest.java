@@ -29,6 +29,7 @@ public class AiRequest extends VersionedAggregate {
     private final Instant createdAt;
 
     private AiRequestStatus status;
+    private String summary;
     private String answer;
     private String clarificationQuestion;
     private RefusalReason refusalReason;
@@ -37,13 +38,15 @@ public class AiRequest extends VersionedAggregate {
     private Integer inputTokens;
     private Integer outputTokens;
     private Integer latencyMs;
+    private OperationReport report;
+    private Instant executedAt;
 
     /** Восстановление из БД. Вызывается только репозиторием. */
     public AiRequest(UUID id, UUID userId, AiRequestStatus status, String idempotencyKey, String requestHash,
-                     int messageLength, String messageHash, String answer, String clarificationQuestion,
+                     int messageLength, String messageHash, String summary, String answer, String clarificationQuestion,
                      RefusalReason refusalReason, String errorCode, String contractVersion, String promptVersion,
                      String provider, String model, int aiCalls, Integer inputTokens, Integer outputTokens,
-                     Integer latencyMs, Instant createdAt, long version) {
+                     Integer latencyMs, OperationReport report, Instant createdAt, Instant executedAt, long version) {
         super(version);
         this.id = id;
         this.userId = userId;
@@ -52,6 +55,7 @@ public class AiRequest extends VersionedAggregate {
         this.requestHash = requestHash;
         this.messageLength = messageLength;
         this.messageHash = messageHash;
+        this.summary = summary;
         this.answer = answer;
         this.clarificationQuestion = clarificationQuestion;
         this.refusalReason = refusalReason;
@@ -64,15 +68,17 @@ public class AiRequest extends VersionedAggregate {
         this.inputTokens = inputTokens;
         this.outputTokens = outputTokens;
         this.latencyMs = latencyMs;
+        this.report = report;
         this.createdAt = createdAt;
+        this.executedAt = executedAt;
     }
 
     public static AiRequest start(UUID userId, String idempotencyKey, String requestHash, int messageLength,
                                   String messageHash, String contractVersion, String promptVersion,
                                   String provider, String model, Instant now) {
         return new AiRequest(UUID.randomUUID(), userId, AiRequestStatus.PENDING_AI, idempotencyKey, requestHash,
-                messageLength, messageHash, null, null, null, null, contractVersion, promptVersion,
-                provider, model, 0, null, null, null, now, 0L);
+                messageLength, messageHash, null, null, null, null, null, contractVersion, promptVersion,
+                provider, model, 0, null, null, null, null, now, null, 0L);
     }
 
     /** Расход на все вызовы AI в этом запросе. Токены null — провайдер их не сообщил. */
@@ -81,6 +87,19 @@ public class AiRequest extends VersionedAggregate {
     public void answered(String answer, Usage usage) {
         finish(AiRequestStatus.ANSWERED, usage);
         this.answer = answer;
+    }
+
+    /**
+     * План исполнен целиком: сейчас — только создания (G-25).
+     *
+     * @param answer текст AI рядом с операциями (G-21); может быть null
+     */
+    public void executed(String summary, String answer, OperationReport report, Usage usage, Instant now) {
+        finish(AiRequestStatus.EXECUTED, usage);
+        this.summary = summary;
+        this.answer = answer;
+        this.report = report;
+        this.executedAt = now;
     }
 
     public void clarificationNeeded(String question, Usage usage) {
@@ -130,6 +149,7 @@ public class AiRequest extends VersionedAggregate {
     public String getRequestHash()            { return requestHash; }
     public int getMessageLength()             { return messageLength; }
     public String getMessageHash()            { return messageHash; }
+    public String getSummary()                { return summary; }
     public String getAnswer()                 { return answer; }
     public String getClarificationQuestion()  { return clarificationQuestion; }
     public RefusalReason getRefusalReason()   { return refusalReason; }
@@ -142,5 +162,7 @@ public class AiRequest extends VersionedAggregate {
     public Integer getInputTokens()           { return inputTokens; }
     public Integer getOutputTokens()          { return outputTokens; }
     public Integer getLatencyMs()             { return latencyMs; }
+    public OperationReport getReport()        { return report; }
     public Instant getCreatedAt()             { return createdAt; }
+    public Instant getExecutedAt()            { return executedAt; }
 }

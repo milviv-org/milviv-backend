@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import com.milviv.application.ai.AiConsentService;
 import com.milviv.application.ai.AiProviderException.Kind;
+import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.AiTurnValidator;
 import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.application.ai.contract.AiTurn;
@@ -42,6 +43,7 @@ class HandleAiRequestH2Test {
 
     private static final Instant NOW = Instant.parse("2026-10-11T12:00:00Z");
     private static final String MESSAGE = "Какие задачи я чаще всего просрочиваю?";
+    static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private Connection keepAlive;
     private JdbcDataSource dataSource;
@@ -81,7 +83,8 @@ class HandleAiRequestH2Test {
 
     private HandleAiRequest handler(FakeAiAssistant ai, int maxCalls) {
         var limits = AiTurnValidatorTest.limits(maxCalls, Duration.ofSeconds(90));
-        return new HandleAiRequest(consents, ai, new AiTurnValidator(limits), new AiRequestJdbcRepository(connections),
+        return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
+                AiCreationsH2Test.executeAiPlan(connections, tx, clock), new AiRequestJdbcRepository(connections, MAPPER),
                 limits, tx, clock);
     }
 
@@ -283,7 +286,7 @@ class HandleAiRequestH2Test {
 
     /** Запрос, «застрявший» в PENDING_AI: сервер упал во время вызова AI. */
     private void insertPending(UUID user, String key, Instant createdAt) {
-        var repository = new AiRequestJdbcRepository(connections);
+        var repository = new AiRequestJdbcRepository(connections, MAPPER);
         tx.execute(() -> repository.add(com.milviv.domain.ai.AiRequest.start(user, key, "h", 1, "h",
                 "assistant.v1", "assistant@1", "fake", "fake-1", createdAt)));
     }

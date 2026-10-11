@@ -10,7 +10,7 @@
 |---|---------|----------------|--------|
 | 9.1 | Согласие и конфиг | `ai_consents`, `GET/POST /ai/consent`, проверка согласия, `AiConfig` со всеми лимитами [§8](limits-and-security.md) | ✅ |
 | 9.2 | Каркас запроса | `AiRequest` (состояния, идемпотентность, один активный запрос), `AiAssistantPort` + `FakeAiAssistant`, `HandleAiRequest` для исходов `ANSWER` / `CLARIFICATION_NEEDED` / `REFUSED`, `POST /ai/requests`, `GET /ai/requests/{id}`, зависшие `PENDING_AI` | ✅ |
-| 9.3 | Создания | Создающая часть `PlanDraft`, `AiResponseValidator` + `AiPolicy`, `ExecuteAiPlan` (фаза 1 через ручные сценарии, одна транзакция), `OperationReportBuilder` | ⏳ |
+| 9.3 | Создания | Создающая часть `PlanDraft`, `AiResponseValidator` + `AiPolicy`, `ExecuteAiPlan` (фаза 1 через ручные сценарии, одна транзакция), отчёт | ✅ |
 | 9.4 | Каталог данных | `AiDataCatalog` (6 запросов, проекции, урезание, без скрытых наград), `HandleRegistry` (дескрипторы с версией), цикл ≤ 2 раундов, журнал прочитанного, создание внутри существующих целей и проектов | ⏳ |
 | 9.5 | Изменения и удаления | Изменения и удаления в плане, `PreviewBuilder`, `PROPOSED`, `POST /ai/requests/{id}/execution` и `/rejection`, сверка версий (`TARGET_CHANGED`), правила дат на итоговом состоянии, TTL | ⏳ |
 | 9.6 | Адаптер Gemini | Провайдерские ключи `AiConfig`, JDK `HttpClient`, промпт `assistant@1`, схема ответа, строгий разбор, таймауты, ретраи, `AiFailure`; тесты на HTTP-заглушке; онлайн-прогон ~25 сообщений (п. 10 [§17](README.md#17-final-architecture)) | ⏳ |
@@ -359,3 +359,191 @@ GET /ai/requests/{id}             → 200 …                    чужой → 
   - превышение `maxCallsPerRequest` и `requestTimeout`;
   - чужой запрос → `404`; в БД нет текста сообщения.
 - `HttpStatusResolver`: все новые коды.
+
+---
+
+## 9.3 Создания ✅
+
+**Задача.** AI предлагает план — сервер проверяет его и **сразу создаёт** всё одной транзакцией [Р G-25], через те же сценарии, что и ручной API (принцип 5). Пользователь получает отчёт со ссылками на созданное [Р G-21].
+
+**В подэтап не входит:**
+- ссылки на существующие сущности (`existing`, дескрипторы) — 9.4: без каталога данных AI их не знает;
+- `ref` и изменения с удалениями — 9.5;
+- лимит созданий в сутки — 9.7.
+
+### Классы
+
+| Класс | Слой | Ответственность |
+|-------|------|-----------------|
+| `AiTurn.Proposal` | application/ai/contract | Новый исход: `summary`, `answer` (необязателен), `plan` |
+| `PlanDraft` | application/ai/contract | Черновик плана от AI. Сейчас только `create`: `goal`, `projects[]`, `tasks[]`, `rewards[]` |
+| `GoalNode`, `ProjectNode`, `TaskNode`, `RewardNode` | application/ai/contract | Узлы дерева создания ([§6.5](contract.md)) |
+| `AiPlanPolicy` | application/ai | Проверка плана: обязательные поля, длины, сложность, баллы, стоимость, даты, количества |
+| `AiTurnValidator` | application/ai | + `Proposal`: `summary`, `answer`; план — через `AiPlanPolicy`. Возвращает `Verdict`: замечания и признак «план слишком большой» |
+| `ExecuteAiPlan` | application/ai | Создаёт узлы через `GoalCommands`, `ProjectCommands`, `TaskCommands`, `RewardCommands`; собирает отчёт из того, что вернули сценарии |
+| `OperationReport`, `ReportItem` | domain/ai | Отчёт: `itemId`, `result`, `type`, `id`, `title` |
+| `AiRequest` | domain/ai | + переход `PENDING_AI → EXECUTED` с `summary`, `answer`, отчётом, `executedAt` |
+| `AiRequestJdbcRepository` | infrastructure/persistence | + `summary`, `result` (JSONB), `executed_at` |
+| `HandleAiRequest` | application/ai | + ветка `Proposal`: транзакция 3 = создания + `EXECUTED` |
+
+### Схема связей
+
+```mermaid
+classDiagram
+    direction LR
+
+    class HandleAiRequest {
+        +execute(userId, key, message) Result
+    }
+    class AiTurnValidator {
+        +validate(turn, today) Verdict
+    }
+    class AiPlanPolicy {
+        +check(plan, today) Verdict
+    }
+    class ExecuteAiPlan {
+        +executeCreations(userId, plan) OperationReport
+    }
+    class AiTurn {
+        <<sealed>>
+    }
+    class Proposal {
+        summary
+        answer
+        plan
+    }
+    class PlanDraft {
+        <<record>>
+        Create create
+    }
+    class GoalNode
+    class ProjectNode
+    class TaskNode
+    class RewardNode
+    class GoalCommands
+    class ProjectCommands
+    class TaskCommands
+    class RewardCommands
+    class OperationReport {
+        <<record>>
+        List~ReportItem~ items
+    }
+    class AiRequest {
+        +executed(summary, answer, report, usage, now)
+    }
+
+    HandleAiRequest --> AiTurnValidator
+    HandleAiRequest --> ExecuteAiPlan
+    HandleAiRequest ..> AiRequest : EXECUTED
+    AiTurnValidator --> AiPlanPolicy
+    Proposal --|> AiTurn
+    Proposal --> PlanDraft
+    PlanDraft --> GoalNode
+    PlanDraft --> ProjectNode
+    PlanDraft --> TaskNode
+    PlanDraft --> RewardNode
+    GoalNode --> ProjectNode
+    GoalNode --> TaskNode
+    ProjectNode --> TaskNode
+    ExecuteAiPlan --> GoalCommands
+    ExecuteAiPlan --> ProjectCommands
+    ExecuteAiPlan --> TaskCommands
+    ExecuteAiPlan --> RewardCommands
+    ExecuteAiPlan ..> OperationReport : строит
+```
+
+### Как работает
+
+```mermaid
+sequenceDiagram
+    participant H as HandleAiRequest
+    participant P as AiAssistantPort
+    participant V as AiTurnValidator + AiPlanPolicy
+    participant E as ExecuteAiPlan
+    participant C as Goal/Project/Task/RewardCommands
+    participant DB as Database
+
+    H->>P: ход (вне транзакции)
+    P-->>H: Proposal
+    H->>V: проверка
+    alt замечания
+        H->>P: повтор с замечаниями (один раз)
+    else план слишком большой
+        H->>DB: FAILED AI_PLAN_TOO_LARGE
+    end
+    H->>DB: tx BEGIN, запрос всё ещё PENDING_AI?
+    H->>E: executeCreations
+    E->>C: create(...) — цель, проекты, задачи, награды
+    C->>DB: INSERT (user_id из сессии)
+    E-->>H: отчёт
+    H->>DB: EXECUTED + summary + отчёт, COMMIT
+```
+
+1. **Проверка плана** (`AiPlanPolicy`, до исполнения):
+   - обязательные поля: `title` у цели, проекта, задачи, награды; `difficulty` у задачи;
+   - длины: `title` ≤ 100, `description` ≤ 1000, `summary` ≤ 500, `answer` ≤ 2000;
+   - баллы задачи 1..1000 или `null` (по сложности); стоимость награды 1..100 000;
+   - даты не дальше `today + 2 года`, в прошлом можно [Р G-23]; начало ≤ срока;
+   - **срок задачи ≤ срока её нового проекта** [Р G-11] — ловится до исполнения, чтобы AI мог исправиться ([§6.6](user-flow.md));
+   - пустой план → замечание.
+2. **Количества:** цель ≤ 1, проектов ≤ 10, задач в одном узле ≤ 10, задач всего ≤ 30, наград ≤ 3, всего ≤ 40. Превышение → `FAILED AI_PLAN_TOO_LARGE` **без повтора** (решение 2).
+3. **Исполнение** — в транзакции 3, вместе со сменой статуса: цель → её проекты → их задачи → задачи цели → проекты без цели → их задачи → задачи без проекта → награды. Каждый узел создаётся ручным сценарием; правила домена проверяются ещё раз внутри него.
+4. **Связи:** проект цели получает `goalId`; задача проекта — `projectId`; задача цели — `goalId`. Задачи AI получают стандартные вопросы рефлексии, как и ручные (K-11).
+5. **Ошибка домена при исполнении** (`ValidationException`, `ConflictException`) → откат всех созданий; отдельной транзакцией запрос → `FAILED BUSINESS_RULE_VIOLATION` ([§10.1](reliability.md)).
+6. **Отчёт** строится по тому, что вернули сценарии (ID и название из созданной сущности), а не по тексту AI (инвариант 6).
+
+**`itemId`** — путь в дереве: `g1` (цель), `g1.p1`, `g1.p1.t1`, `g1.t1`, `p1`, `p1.t1`, `t1`, `r1`.
+
+### API
+
+```json
+→ 201
+{
+  "requestId": "7f9e…", "status": "EXECUTED",
+  "summary": "Цель «Английский» с двумя проектами и наградой",
+  "answer": null,
+  "report": [
+    { "itemId": "g1",       "result": "CREATED", "type": "GOAL",    "id": "1c9e…", "title": "Выучить английский" },
+    { "itemId": "g1.p1",    "result": "CREATED", "type": "PROJECT", "id": "a41d…", "title": "Грамматика" },
+    { "itemId": "g1.p1.t1", "result": "CREATED", "type": "TASK",    "id": "6b2f…", "title": "Времена Simple" },
+    { "itemId": "r1",       "result": "CREATED", "type": "REWARD",  "id": "9f3a…", "title": "Кино" }
+  ],
+  …
+}
+```
+
+| Код | HTTP | Когда |
+|-----|------|-------|
+| `AI_PLAN_TOO_LARGE` | 422 | План превышает количественные лимиты |
+| `BUSINESS_RULE_VIOLATION` | 422 | Правило домена нарушено при исполнении; ничего не создано |
+
+### Решения на подтверждение
+
+1. **Миграция V17: колонка `summary TEXT`.** В V14 для пояснения AI места нет, а клиенту оно нужно ([§6.6](user-flow.md)). Отчёт пишется в `result` JSONB.
+2. **Превышение количественных лимитов — сразу `AI_PLAN_TOO_LARGE`, без повтора.** Если просить AI «уложиться в 40», он молча выбросит часть задач — это та же обрезка, от которой отказалась концепция ([§8](limits-and-security.md), TO-8). Остальные нарушения — один повтор с замечаниями.
+3. **`audit_log` не пишем (K-7).** Журналом сейчас не владеет ни один сценарий (R-03), а каждый AI-запрос и так хранит отчёт в `ai_requests.result`. Если нужен — отдельным подэтапом для всех источников, не только AI.
+4. **`ValidatedPlan` пока не вводится.** Созданиям не нужно хранимое представление плана: они исполняются в том же запросе. Появится в 9.5 для ожидающих подтверждения изменений.
+5. **Лимиты и каталог сложностей — в `AiPrompt`** (поля `limits`, `difficulty` из [§6.1](contract.md)), чтобы адаптер 9.6 мог передать их модели.
+6. **Неожиданная ошибка при исполнении** (не правило домена) → откат, `500`, запрос остаётся `PENDING_AI` и через таймаут становится `FAILED`. Отдельного кода для этого в концепции нет.
+
+### Сверка с кодом (после реализации)
+
+- Классы, связи и последовательность — как в схемах. Решения 1–6 приняты; V17 — `V17__ai_request_summary.sql`.
+- **`ExecuteAiPlan` требует внешнюю транзакцию** (`Propagation.MANDATORY`): вызванный вне её, он упадёт, а не создаст часть плана.
+- **Решение 5 сокращено:** в `AiPrompt` передаются только лимиты плана. Каталог сложностей адаптер 9.6 возьмёт из `Difficulty` — дублировать его в каждом запросе не нужно.
+- **Отчёт хранится в `result` JSONB** через `CAST(? AS JSONB)`. В H2-тестах `JSONB` — домен над CLOB, поэтому SQL репозитория одинаков для PostgreSQL и H2.
+- **Откат проверен тестом:** лимит стоимости награды для AI нарочно сделан мягче доменного — домен отвергает награду последним узлом, и цель, проекты, задачи этой транзакции не сохраняются.
+- **Не проверено на PostgreSQL:** запись JSONB и миграции V16–V17 — Docker нет; применятся при запуске.
+
+### Тесты
+
+- `AiPlanPolicy`: каждое правило и каждый лимит; срок задачи позже срока нового проекта; горизонт дат; пустой план.
+- `ExecuteAiPlan` на H2: дерево цель → проекты → задачи создаётся со связями; баллы по сложности при `points = null`; у задач стандартные вопросы рефлексии; награды видимые.
+- `HandleAiRequest` на H2 + `FakeAiAssistant`:
+  - только создания → `EXECUTED`, отчёт, ID в отчёте = ID в БД;
+  - повтор с тем же ключом → тот же отчёт, **дубликатов нет**;
+  - неверный план → повтор с замечаниями → исправленный план создан;
+  - слишком большой план → `422 AI_PLAN_TOO_LARGE`, ничего не создано, повтора нет;
+  - ошибка домена на последнем узле → **ничего не создано**, `FAILED BUSINESS_RULE_VIOLATION`;
+  - созданное принадлежит только этому пользователю.
+- `HttpStatusResolver`: новые коды.
