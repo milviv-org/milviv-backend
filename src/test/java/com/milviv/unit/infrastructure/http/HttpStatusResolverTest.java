@@ -5,6 +5,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
+import com.milviv.domain.exception.AiConsentRequiredException;
 import com.milviv.domain.exception.AppException;
 import com.milviv.domain.exception.OptimisticLockException;
 import com.milviv.infrastructure.http.HttpStatusResolver;
@@ -31,5 +32,10 @@ class HttpStatusResolverTest {
 
         // when / then
         assertThat(resolver.resolve(ex)).isEqualTo(500);
+    }
+
+    @Test
+    void resolve_shouldReturnForbidden_whenAiConsentRequired() {
+        assertThat(resolver.resolve(new AiConsentRequiredException())).isEqualTo(403);
     }
 }

@@ -31,6 +31,7 @@
 | [limits-and-security.md](limits-and-security.md) | Лимиты, конфиг, угрозы и защита | 8, 9 |
 | [reliability.md](reliability.md) | Транзакции, повторы, ошибки | 10, 11 |
 | [development.md](development.md) | Тесты, версии, расширение | 12, 14, 15 |
+| [implementation.md](implementation.md) | Подэтапы реализации, схемы классов, решения по ходу | — |
 
 Номера разделов сквозные: «§8» в любом файле означает раздел 8 из таблицы выше.
 

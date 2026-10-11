@@ -16,6 +16,8 @@ import com.milviv.application.auth.RefreshSession;
 import com.milviv.application.auth.RegisterUser;
 import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.application.ai.AiConsentService;
+import com.milviv.application.ai.AiLimits;
 import com.milviv.application.gamification.HiddenRewardsAccess;
 import com.milviv.application.gamification.PointsQueries;
 import com.milviv.application.gamification.RewardCommands;
@@ -35,6 +37,7 @@ import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
+import com.milviv.domain.ai.AiConsentRepository;
 import com.milviv.domain.gamification.HiddenRewardsPasswordRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
 import com.milviv.domain.gamification.RewardRepository;
@@ -50,6 +53,7 @@ import com.milviv.domain.statistics.StatisticsRepository;
 import com.milviv.domain.task.TaskCompletionRepository;
 import com.milviv.domain.task.TaskRepository;
 import com.milviv.infrastructure.config.AppConfig;
+import com.milviv.infrastructure.config.AiConfig;
 import com.milviv.infrastructure.config.AuthConfig;
 import com.milviv.infrastructure.config.CalendarConfig;
 import com.milviv.infrastructure.config.ReflectionConfig;
@@ -70,6 +74,7 @@ import com.milviv.infrastructure.persistence.DatabaseConnectionManager;
 import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
+import com.milviv.infrastructure.persistence.jdbc.AiConsentJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
@@ -93,6 +98,7 @@ import com.milviv.infrastructure.security.BCryptPasswordHasher;
 import com.milviv.infrastructure.security.InMemoryLoginAttemptLimiter;
 import com.milviv.infrastructure.security.JwtAccessTokenService;
 import com.milviv.infrastructure.security.JwtCookieAuthenticator;
+import com.milviv.presentation.rest.controllers.AiConsentController;
 import com.milviv.presentation.rest.controllers.AuthController;
 import com.milviv.presentation.rest.controllers.CalendarController;
 import com.milviv.presentation.rest.controllers.GoalController;
@@ -133,6 +139,7 @@ public class Main {
                     .register(CalendarConfig.class, Scope.SINGLETON)
                     .register(ReflectionConfig.class, Scope.SINGLETON)
                     .register(StatisticsConfig.class, Scope.SINGLETON)
+                    .register(AiConfig.class, Scope.SINGLETON)
                     .register(DatabaseConnectionManager.class, Scope.SINGLETON)
                     .register(FlywayMigrationRunner.class, Scope.SINGLETON)
                     .register(JacksonConfig.class, Scope.SINGLETON);
@@ -219,6 +226,11 @@ public class Main {
             container.singletone(SoundSettingsRepository.class, new SoundSettingsJdbcRepository(connectionProvider));
             container.register(SoundSettings.class);
 
+            // AI
+            container.singletone(AiLimits.class, container.get(AiConfig.class).toLimits());
+            container.singletone(AiConsentRepository.class, new AiConsentJdbcRepository(connectionProvider));
+            container.register(AiConsentService.class);
+
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
             // ═══════════════════════════════════════════════════════════
@@ -257,6 +269,7 @@ public class Main {
                     ReflectionController.class,
                     StatisticsController.class,
                     SoundSettingsController.class,
+                    AiConsentController.class,
                     HealthController.class
             );
 

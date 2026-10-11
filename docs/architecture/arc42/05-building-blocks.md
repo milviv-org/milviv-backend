@@ -59,7 +59,7 @@ presentation  →  infrastructure  →  application  →  domain
 | `gamification` | Баллы, баланс, награды, обмен, скрытые награды (FR-09…FR-11) | ✅ |
 | `reflection` | Вопросы и ответы рефлексии (FR-12) | ✅ |
 | `statistics` | Сводка по истории выполнения, прогресс проектов и целей (FR-07) | ✅ |
-| `ai` | AI-запрос, план, согласие на использование данных (FR-13) | ⚠️ |
+| `ai` | AI-запрос, план, согласие на использование данных (FR-13) | 🟡 согласие и лимиты (9.1) |
 | `shared` | `VersionedAggregate` — версионирование агрегатов | ✅ |
 | `exception` | `AppException` и наследники | ✅ |
 
@@ -99,7 +99,7 @@ presentation  →  infrastructure  →  application  →  domain
 | Блок | Ответственность | Статус |
 | ---- | --------------- | ------ |
 | `Main` | Composition root | ✅ |
-| `rest/controllers` | `AuthController`, `GoalController`, `ProjectController`, `TaskController`, `PlanController`, `CalendarController`, `RewardController`, `PointsController`, `ReflectionController`, `StatisticsController`, `SoundSettingsController`, `HealthController` | 🟡 |
+| `rest/controllers` | `AuthController`, `GoalController`, `ProjectController`, `TaskController`, `PlanController`, `CalendarController`, `RewardController`, `PointsController`, `ReflectionController`, `StatisticsController`, `SoundSettingsController`, `AiConsentController`, `HealthController` | 🟡 |
 | `rest/dto` | Внешний контракт API отдельно от доменных сущностей | ⚠️ |
 | Аутентификация | `@Public` + проверка токена в `RouterScanner` (`infrastructure/http`, `infrastructure/security`) | ✅ |
 | `rest/exception` | Обработка исключений на границе HTTP | ⚠️ |
