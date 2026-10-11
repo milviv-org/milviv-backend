@@ -16,6 +16,10 @@ import com.milviv.application.auth.RefreshSession;
 import com.milviv.application.auth.RegisterUser;
 import com.milviv.application.auth.SessionIssuer;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.application.gamification.HiddenRewardsAccess;
+import com.milviv.application.gamification.PointsQueries;
+import com.milviv.application.gamification.RewardCommands;
+import com.milviv.application.gamification.SetHiddenRewardsPassword;
 import com.milviv.application.goal.GoalCommands;
 import com.milviv.application.planning.CalendarPolicy;
 import com.milviv.application.planning.CalendarQuery;
@@ -25,7 +29,9 @@ import com.milviv.application.task.CompleteTask;
 import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
+import com.milviv.domain.gamification.HiddenRewardsPasswordRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
+import com.milviv.domain.gamification.RewardRepository;
 import com.milviv.domain.goal.GoalRepository;
 import com.milviv.domain.planning.PlanRepository;
 import com.milviv.domain.planning.TaskRescheduleRepository;
@@ -52,9 +58,11 @@ import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PlanJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.PointsHistoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.ProjectJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.RewardJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.RefreshTokenJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskCompletionJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.TaskJdbcRepository;
@@ -72,6 +80,8 @@ import com.milviv.presentation.rest.controllers.CalendarController;
 import com.milviv.presentation.rest.controllers.GoalController;
 import com.milviv.presentation.rest.controllers.HealthController;
 import com.milviv.presentation.rest.controllers.PlanController;
+import com.milviv.presentation.rest.controllers.PointsController;
+import com.milviv.presentation.rest.controllers.RewardController;
 import com.milviv.presentation.rest.controllers.ProjectController;
 import com.milviv.presentation.rest.controllers.TaskController;
 import com.milviv.shared.validation.annotation.AnnotationValidator;
@@ -162,6 +172,15 @@ public class Main {
                     .register(PlanCommands.class)
                     .register(CalendarQuery.class);
 
+            // Награды и баллы
+            container.singletone(RewardRepository.class, new RewardJdbcRepository(connectionProvider));
+            container.singletone(HiddenRewardsPasswordRepository.class, new HiddenRewardsPasswordJdbcRepository(connectionProvider));
+            container
+                    .register(HiddenRewardsAccess.class)
+                    .register(RewardCommands.class)
+                    .register(PointsQueries.class)
+                    .register(SetHiddenRewardsPassword.class);
+
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
             // ═══════════════════════════════════════════════════════════
@@ -195,6 +214,8 @@ public class Main {
                     TaskController.class,
                     PlanController.class,
                     CalendarController.class,
+                    RewardController.class,
+                    PointsController.class,
                     HealthController.class
             );
 

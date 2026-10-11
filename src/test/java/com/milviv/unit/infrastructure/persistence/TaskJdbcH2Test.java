@@ -173,7 +173,12 @@ class TaskJdbcH2Test {
     @Test
     void complete_shouldRollBackEverything_whenPointsFail() throws SQLException {
         TaskView task = commands.create(alice, details("Задача"));
-        PointsHistoryRepository failing = (u, t, p, r, at) -> { throw new IllegalStateException("points down"); };
+        PointsHistoryRepository failing = new PointsHistoryJdbcRepository(connections) {
+            @Override
+            public void recordTaskCompleted(UUID u, UUID t, int p, String r, Instant at) {
+                throw new IllegalStateException("points down");
+            }
+        };
         CompleteTask completeTask = new CompleteTask(tasks, completions, failing, new PlanJdbcRepository(connections), tx, clock);
 
         assertThatThrownBy(() -> completeTask.execute(alice, task.id())).hasMessage("points down");

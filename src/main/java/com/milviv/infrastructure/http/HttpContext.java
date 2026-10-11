@@ -72,6 +72,10 @@ public class HttpContext {
         return request.getParameter(name);
     }
 
+    public String header(String name) {
+        return request.getHeader(name);
+    }
+
     /** Ответ без тела, например 204 No Content. */
     public void status(int status) {
         response.setStatus(status);

@@ -46,7 +46,7 @@
 | `email` | VARCHAR(255) | Логин, уникальный, в нижнем регистре |
 | `name` | VARCHAR(100) | Имя для отображения |
 | `password_hash` | VARCHAR(255) | BCrypt-хеш пароля |
-| `hidden_rewards_password_hash` | VARCHAR(255) | BCrypt-хеш общего пароля скрытых наград |
+| `hidden_rewards_password_hash` | VARCHAR(255) | BCrypt-хеш общего пароля скрытых наград; NULL — не задан. Меняется без смены `version` |
 | `created_at`, `updated_at` | TIMESTAMP | Создан, изменён |
 | `version` | BIGINT | Версия |
 
@@ -144,7 +144,7 @@ Refresh-токены сессий входа. Хранится только хе
 | `user_id` | UUID | Владелец |
 | `title` | VARCHAR(255) | Название |
 | `description` | TEXT | Описание |
-| `cost` | INTEGER | Стоимость в баллах, > 0 |
+| `cost` | INTEGER | Стоимость в баллах, > 0; приложение ограничивает 1..1 000 000. Награду можно получать повторно |
 | `hidden` | BOOLEAN | Скрытая: видна только по паролю, недоступна AI |
 | `version` | BIGINT | Версия |
 | `created_at`, `updated_at` | TIMESTAMP | Создана, изменена |
