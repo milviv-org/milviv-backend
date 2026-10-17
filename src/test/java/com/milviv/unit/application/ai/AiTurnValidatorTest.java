@@ -12,17 +12,17 @@ import com.milviv.application.ai.HandleRegistry;
 import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.domain.ai.RefusalReason;
 
-class AiTurnValidatorTest {
+public class AiTurnValidatorTest {
 
     /** Дефолты §8 с заданными пределами вызовов, таймаута и длин ответа и вопроса. */
-    static AiLimits limits(int maxCalls, Duration requestTimeout, int answerMax, int clarificationMax) {
+    public static AiLimits limits(int maxCalls, Duration requestTimeout, int answerMax, int clarificationMax) {
         return new AiLimits(
                 new AiLimits.Request(2000, 20, 3, maxCalls, requestTimeout, Duration.ofHours(24), 200, Duration.ofMinutes(60)),
                 new AiLimits.Data(2, 3, 100, 1000, 16_000),
                 new AiLimits.Plan(40, 20, 10, 10, 10, 30, 3, 100, 1000, 500, answerMax, clarificationMax, 200, 2, 100_000));
     }
 
-    static AiLimits limits(int maxCalls, Duration requestTimeout) {
+    public static AiLimits limits(int maxCalls, Duration requestTimeout) {
         return limits(maxCalls, requestTimeout, 2000, 300);
     }
 

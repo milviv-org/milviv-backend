@@ -1,0 +1,84 @@
+{
+  "contractVersion": "assistant.v1",
+  "outcome": "PROPOSAL",
+  "summary": "Перенёс задачи и удалил пустой проект",
+  "answer": "Задачи по грамматике просрочены чаще других",
+  "plan": {
+    "create": {
+      "projects": [
+        {
+          "ref": "n_read",
+          "title": "Чтение",
+          "tasks": []
+        }
+      ]
+    },
+    "update": {
+      "tasks": [
+        {
+          "target": "t_9fLm",
+          "set": {
+            "title": null,
+            "description": {
+              "value": null
+            },
+            "difficulty": {
+              "value": "EXPERT"
+            },
+            "points": {
+              "value": null
+            },
+            "startDate": null,
+            "deadline": {
+              "value": "2026-10-08"
+            },
+            "project": {
+              "value": "n_read"
+            },
+            "goal": {
+              "value": null
+            }
+          }
+        }
+      ],
+      "projects": [
+        {
+          "target": "p_2mZa",
+          "set": {
+            "deadline": {
+              "value": "2026-12-15"
+            },
+            "goal": {
+              "value": "g_k7Qx"
+            }
+          }
+        }
+      ],
+      "goals": [
+        {
+          "target": "g_k7Qx",
+          "set": {
+            "title": {
+              "value": "Английский B2"
+            }
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "target": "r_Q3aa",
+          "set": {
+            "cost": {
+              "value": 700
+            }
+          }
+        }
+      ]
+    },
+    "delete": [
+      {
+        "target": "p_Old1"
+      }
+    ]
+  }
+}

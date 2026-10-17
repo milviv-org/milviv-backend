@@ -84,6 +84,7 @@ import com.milviv.domain.user.UserRepository;
 import com.milviv.infrastructure.persistence.connection.ConnectionProvider;
 import com.milviv.infrastructure.persistence.connection.TransactionalConnectionProvider;
 import com.milviv.infrastructure.ai.UnavailableAiAssistant;
+import com.milviv.infrastructure.ai.gemini.GeminiAssistantAdapter;
 import com.milviv.infrastructure.persistence.jdbc.AiConsentJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.AiRequestJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
@@ -243,8 +244,11 @@ public class Main {
             container.singletone(AiConsentRepository.class, new AiConsentJdbcRepository(connectionProvider));
             container.singletone(AiRequestRepository.class, new AiRequestJdbcRepository(connectionProvider,
                     container.get(JacksonConfig.class).getObjectMapper()));
-            // настоящий провайдер — с адаптером Gemini (9.6); до тех пор AI-запросы отвечают 503
-            container.singletone(AiAssistantPort.class, new UnavailableAiAssistant());
+            // AI_PROVIDER=none — AI-запросы отвечают 503, приложение работает без ключа
+            AiConfig aiConfig = container.get(AiConfig.class);
+            container.singletone(AiAssistantPort.class, AiConfig.PROVIDER_GEMINI.equals(aiConfig.provider())
+                    ? new GeminiAssistantAdapter(aiConfig.toGeminiSettings(), aiConfig.toLimits())
+                    : new UnavailableAiAssistant());
             container
                     .register(AiConsentService.class)
                     .register(AiPlanPolicy.class)

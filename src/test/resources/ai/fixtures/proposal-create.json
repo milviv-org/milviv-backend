@@ -1,0 +1,62 @@
+{
+  "contractVersion": "assistant.v1",
+  "outcome": "PROPOSAL",
+  "summary": "Цель «Английский» с проектом и задачами",
+  "answer": null,
+  "plan": {
+    "create": {
+      "goal": {
+        "existing": null,
+        "title": "Английский",
+        "description": null,
+        "projects": [
+          {
+            "ref": null,
+            "existing": null,
+            "title": "Грамматика",
+            "description": null,
+            "deadline": "2026-12-01",
+            "tasks": [
+              {
+                "title": "Времена Simple",
+                "description": null,
+                "difficulty": "APPRENTICE",
+                "points": null,
+                "startDate": null,
+                "deadline": "2026-11-01"
+              }
+            ]
+          }
+        ],
+        "tasks": []
+      },
+      "projects": [
+        {
+          "existing": "p_2mZa",
+          "tasks": [
+            {
+              "title": "Present Perfect",
+              "difficulty": "ADEPT",
+              "points": 12
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "title": "Одиночная",
+          "difficulty": "NOVICE"
+        }
+      ],
+      "rewards": [
+        {
+          "title": "Кино",
+          "description": null,
+          "cost": 500
+        }
+      ]
+    },
+    "update": null,
+    "delete": null
+  }
+}

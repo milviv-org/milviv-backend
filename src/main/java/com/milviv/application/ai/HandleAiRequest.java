@@ -228,20 +228,26 @@ public class HandleAiRequest {
                         LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, limits.plan(),
                         List.copyOf(conversation.rounds)));
             } catch (AiProviderException ex) {
-                switch (ex.getKind()) {
-                    case UNAVAILABLE -> { return failure(Code.AI_PROVIDER_UNAVAILABLE, calls, tokens, startedAt, conversation); }
-                    case TIMEOUT -> { return failure(Code.AI_TIMEOUT, calls, tokens, startedAt, conversation); }
-                    case MALFORMED -> {
-                        // неразобранный ответ — тот же неверный ход: один шанс исправиться
-                        if (repaired) {
-                            return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt, conversation);
-                        }
-                        repaired = true;
-                        violations = List.of("response: MALFORMED");
-                        continue;
-                    }
+                Code code = switch (ex.getKind()) {
+                    case UNAVAILABLE, RATE_LIMITED -> Code.AI_PROVIDER_UNAVAILABLE;
+                    case QUOTA_EXHAUSTED -> Code.AI_PROVIDER_QUOTA_EXHAUSTED;
+                    case TIMEOUT -> Code.AI_TIMEOUT;
+                    // перефразировать должен пользователь, не модель
+                    case REFUSED -> Code.AI_REFUSED;
+                    case MALFORMED, OUTPUT_TRUNCATED -> null;
+                };
+                if (code != null) {
+                    return failure(code, calls, tokens, startedAt, conversation);
                 }
-                throw ex;
+                // неразобранный или оборванный ответ — тот же неверный ход: один шанс исправиться
+                if (repaired) {
+                    return failure(Code.AI_INVALID_RESPONSE, calls, tokens, startedAt, conversation);
+                }
+                repaired = true;
+                violations = ex.getKind() == AiProviderException.Kind.OUTPUT_TRUNCATED
+                        ? List.of("response: OUTPUT_TRUNCATED")
+                        : ex.getViolations().isEmpty() ? List.of("response: MALFORMED") : ex.getViolations();
+                continue;
             }
             tokens.add(reply);
 
@@ -300,8 +306,12 @@ public class HandleAiRequest {
             return new AiRequest.Usage(calls, input, output, (int) Duration.between(startedAt, now).toMillis());
         }
 
+        /** Без тернарного оператора: он распаковал бы null в int. */
         private static Integer sum(Integer total, Integer value) {
-            return value == null ? total : (total == null ? value : total + value);
+            if (value == null) {
+                return total;
+            }
+            return total == null ? value : Integer.valueOf(total + value);
         }
     }
 

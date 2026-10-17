@@ -22,6 +22,7 @@ public class FakeAiAssistant implements AiAssistantPort {
     private final Deque<Object> script = new ArrayDeque<>();
     private final List<AiPrompt> prompts = new ArrayList<>();
     private Consumer<AiPrompt> beforeReply = prompt -> {};
+    private boolean reportTokens = true;
 
     public FakeAiAssistant thenTurn(AiTurn turn) {
         script.add(turn);
@@ -39,9 +40,21 @@ public class FakeAiAssistant implements AiAssistantPort {
         return this;
     }
 
+    /** Сбой с замечаниями — как MALFORMED от разбора ответа. */
+    public FakeAiAssistant thenFail(AiProviderException failure) {
+        script.add(failure);
+        return this;
+    }
+
     /** Действие во время «вызова», например сдвинуть часы, чтобы истёк таймаут. */
     public FakeAiAssistant duringCall(Consumer<AiPrompt> action) {
         this.beforeReply = action;
+        return this;
+    }
+
+    /** Провайдер, который не сообщает токены. */
+    public FakeAiAssistant withoutTokens() {
+        this.reportTokens = false;
         return this;
     }
 
@@ -67,15 +80,22 @@ public class FakeAiAssistant implements AiAssistantPort {
         if (next == null) {
             throw new IllegalStateException("FakeAiAssistant: script is empty, call " + prompt.call());
         }
+        if (next instanceof AiProviderException failure) {
+            throw failure;
+        }
         if (next instanceof AiProviderException.Kind kind) {
             throw new AiProviderException(kind, "fake failure");
         }
         if (next instanceof Function<?, ?> function) {
             @SuppressWarnings("unchecked")
             Function<AiPrompt, AiTurn> dynamic = (Function<AiPrompt, AiTurn>) function;
-            return new AiReply(dynamic.apply(prompt), 10, 5);
+            return reply(dynamic.apply(prompt));
         }
-        return new AiReply((AiTurn) next, 10, 5);
+        return reply((AiTurn) next);
+    }
+
+    private AiReply reply(AiTurn turn) {
+        return reportTokens ? new AiReply(turn, 10, 5) : new AiReply(turn, null, null);
     }
 
     /** Часы, которые тест двигает вручную. */

@@ -1,0 +1,1019 @@
+{
+  "type": "object",
+  "description": "Ход AI по контракту assistant.v1. Поля чужого outcome — null.",
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "enum": [
+        "assistant.v1"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "DATA_REQUEST",
+        "PROPOSAL",
+        "ANSWER",
+        "CLARIFICATION_NEEDED",
+        "REFUSED"
+      ]
+    },
+    "dataRequestReason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dataRequests": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "LIST_GOALS",
+              "LIST_PROJECTS",
+              "LIST_TASKS",
+              "LIST_REWARDS",
+              "LIST_PLANS",
+              "LIST_REFLECTIONS"
+            ]
+          },
+          "goal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "task": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unassigned": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED"
+            ]
+          },
+          "period": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "from": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "to": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "answer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "plan": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "create": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "goal": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "existing": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "projects": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "ref": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "existing": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "title": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "deadline": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date"
+                      },
+                      "tasks": {
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "title": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "description": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "difficulty": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "enum": [
+                                "NOVICE",
+                                "APPRENTICE",
+                                "ADEPT",
+                                "EXPERT",
+                                "MASTER",
+                                "LEGENDARY"
+                              ]
+                            },
+                            "points": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "minimum": 1,
+                              "maximum": 1000
+                            },
+                            "startDate": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date"
+                            },
+                            "deadline": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "maxItems": 10
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "maxItems": 10
+                },
+                "tasks": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "difficulty": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "NOVICE",
+                          "APPRENTICE",
+                          "ADEPT",
+                          "EXPERT",
+                          "MASTER",
+                          "LEGENDARY"
+                        ]
+                      },
+                      "points": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 1000
+                      },
+                      "startDate": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date"
+                      },
+                      "deadline": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "maxItems": 10
+                }
+              },
+              "additionalProperties": false
+            },
+            "projects": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "existing": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "deadline": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "tasks": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "difficulty": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "enum": [
+                            "NOVICE",
+                            "APPRENTICE",
+                            "ADEPT",
+                            "EXPERT",
+                            "MASTER",
+                            "LEGENDARY"
+                          ]
+                        },
+                        "points": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "maximum": 1000
+                        },
+                        "startDate": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date"
+                        },
+                        "deadline": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            },
+            "tasks": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "title": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "difficulty": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "NOVICE",
+                      "APPRENTICE",
+                      "ADEPT",
+                      "EXPERT",
+                      "MASTER",
+                      "LEGENDARY"
+                    ]
+                  },
+                  "points": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "startDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "deadline": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            },
+            "rewards": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "title": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "cost": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 3
+            }
+          },
+          "additionalProperties": false
+        },
+        "update": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "tasks": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "set": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "description": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "difficulty": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "NOVICE",
+                              "APPRENTICE",
+                              "ADEPT",
+                              "EXPERT",
+                              "MASTER",
+                              "LEGENDARY"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "points": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "startDate": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "deadline": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "project": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "goal": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            },
+            "projects": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "set": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "description": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "deadline": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "goal": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            },
+            "goals": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "set": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "description": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            },
+            "rewards": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "set": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "description": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      },
+                      "cost": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "null — не менять; {value: x} — установить; {value: null} — очистить"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            }
+          },
+          "additionalProperties": false
+        },
+        "delete": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "target": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "maxItems": 10
+        }
+      },
+      "additionalProperties": false
+    },
+    "clarificationQuestion": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "refusalReason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "OFF_TOPIC",
+        "UNSUPPORTED_OPERATION",
+        "OTHER"
+      ]
+    }
+  },
+  "required": [
+    "contractVersion",
+    "outcome"
+  ],
+  "additionalProperties": false
+}

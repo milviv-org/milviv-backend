@@ -1,0 +1,28 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "думаю…",
+            "thought": true
+          },
+          {
+            "text": "{\"contractVersion\": \"assistant.v1\", \"outcome\": \"ANSWER\", \"answer\": \"Чаще всего просрочены задачи по грамматике\"}"
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1200,
+    "candidatesTokenCount": 80,
+    "thoughtsTokenCount": 40,
+    "totalTokenCount": 1320
+  },
+  "modelVersion": "gemini-flash-test",
+  "responseId": "resp-1"
+}

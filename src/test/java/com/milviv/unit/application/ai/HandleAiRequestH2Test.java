@@ -266,6 +266,42 @@ class HandleAiRequestH2Test {
     }
 
     @Test
+    void newProviderFailures_mapToCodes() {
+        assertThatThrownBy(() -> handler(new FakeAiAssistant().thenFail(Kind.QUOTA_EXHAUSTED)).execute(alice, "k1", MESSAGE))
+                .satisfies(ex -> assertThat(code(ex)).isEqualTo(Code.AI_PROVIDER_QUOTA_EXHAUSTED));
+        assertThatThrownBy(() -> handler(new FakeAiAssistant().thenFail(Kind.RATE_LIMITED)).execute(alice, "k2", MESSAGE))
+                .satisfies(ex -> assertThat(code(ex)).isEqualTo(Code.AI_PROVIDER_UNAVAILABLE));
+        // блокировка провайдером — отказ без повтора: перефразировать должен пользователь
+        FakeAiAssistant blocked = new FakeAiAssistant().thenFail(Kind.REFUSED);
+        assertThatThrownBy(() -> handler(blocked).execute(alice, "k3", MESSAGE))
+                .satisfies(ex -> assertThat(code(ex)).isEqualTo(Code.AI_REFUSED));
+        assertThat(blocked.prompts()).hasSize(1);
+    }
+
+    @Test
+    void parserViolations_reachNextCall_andTruncationIsRepairedOnce() {
+        FakeAiAssistant ai = new FakeAiAssistant()
+                .thenFail(new com.milviv.application.ai.AiProviderException(Kind.MALFORMED, "bad",
+                        List.of("plan.update.tasks[0].set.status: UNKNOWN_FIELD")))
+                .thenTurn(new AiTurn.Answer("Исправлено"));
+        assertThat(handler(ai).execute(alice, "k1", MESSAGE).request().status()).isEqualTo(AiRequestStatus.ANSWERED);
+        assertThat(ai.prompts().get(1).violations()).containsExactly("plan.update.tasks[0].set.status: UNKNOWN_FIELD");
+
+        FakeAiAssistant truncated = new FakeAiAssistant().thenFail(Kind.OUTPUT_TRUNCATED).thenFail(Kind.OUTPUT_TRUNCATED);
+        assertThatThrownBy(() -> handler(truncated).execute(alice, "k2", MESSAGE))
+                .satisfies(ex -> assertThat(code(ex)).isEqualTo(Code.AI_INVALID_RESPONSE));
+        assertThat(truncated.prompts().get(1).violations()).containsExactly("response: OUTPUT_TRUNCATED");
+    }
+
+    @Test
+    void providerWithoutTokenCounts_isFine() {
+        FakeAiAssistant ai = new FakeAiAssistant().withoutTokens()
+                .thenTurn(new AiTurn.Answer(" ")).thenTurn(new AiTurn.Answer("Ответ"));
+
+        assertThat(handler(ai).execute(alice, "k1", MESSAGE).request().status()).isEqualTo(AiRequestStatus.ANSWERED);
+    }
+
+    @Test
     void requestTimeout_coversAllCalls() {
         FakeAiAssistant ai = new FakeAiAssistant().thenTurn(new AiTurn.Answer("поздно"))
                 .duringCall(prompt -> clock.advance(Duration.ofSeconds(91)));

@@ -12,6 +12,7 @@ public class AiRequestException extends DomainException {
         AI_REQUEST_IN_PROGRESS("Предыдущий запрос ещё обрабатывается"),
         IDEMPOTENCY_KEY_REUSED("Ключ запроса уже использован с другим сообщением"),
         AI_PROVIDER_UNAVAILABLE("AI временно недоступен"),
+        AI_PROVIDER_QUOTA_EXHAUSTED("Бесплатный лимит AI исчерпан, попробуйте позже"),
         AI_TIMEOUT("AI не ответил вовремя"),
         AI_INVALID_RESPONSE("Не удалось обработать запрос, попробуйте переформулировать"),
         AI_REFUSED("AI не может выполнить этот запрос"),

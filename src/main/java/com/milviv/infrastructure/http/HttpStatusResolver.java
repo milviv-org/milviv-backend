@@ -22,6 +22,7 @@ public class HttpStatusResolver {
             Map.entry("AI_REQUEST_IN_PROGRESS", HttpServletResponse.SC_CONFLICT),
             Map.entry("IDEMPOTENCY_KEY_REUSED", 422),
             Map.entry("AI_PROVIDER_UNAVAILABLE", HttpServletResponse.SC_SERVICE_UNAVAILABLE),
+            Map.entry("AI_PROVIDER_QUOTA_EXHAUSTED", HttpServletResponse.SC_SERVICE_UNAVAILABLE),
             Map.entry("AI_TIMEOUT", HttpServletResponse.SC_GATEWAY_TIMEOUT),
             Map.entry("AI_INVALID_RESPONSE", HttpServletResponse.SC_BAD_GATEWAY),
             Map.entry("AI_REFUSED", 422),

@@ -4,7 +4,7 @@ import com.milviv.application.ai.AiAssistantPort;
 import com.milviv.application.ai.AiProviderException;
 
 /**
- * Провайдер, пока адаптера Gemini нет (подэтап 9.6): каждый вызов — «недоступен».
+ * Провайдер при AI_PROVIDER=none: каждый вызов — «недоступен».
  * POST /ai/requests проверяет согласие, записывает запрос и отвечает 503 AI_PROVIDER_UNAVAILABLE.
  */
 public class UnavailableAiAssistant implements AiAssistantPort {

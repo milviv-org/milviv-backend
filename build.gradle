@@ -206,7 +206,10 @@ application {
 }
 
 test {
-    useJUnitPlatform()
+    // онлайн-прогон AI ходит в настоящий Gemini — только вручную, задачей onlineAiTest
+    useJUnitPlatform {
+        excludeTags 'online'
+    }
     testLogging {
         events "passed", "skipped", "failed"
         exceptionFormat "full"
@@ -217,6 +220,27 @@ test {
     
     // Allow Mockito to attach as Java Agent (required for Java 21+)
     jvmArgs '-XX:+EnableDynamicAgentLoading'
+}
+
+// Онлайн-прогон AI (подэтап 9.6, §12): ~25 сообщений против настоящего Gemini.
+// Нужны GEMINI_API_KEY и AI_MODEL (env или .env). Расходует бесплатную квоту, данные тестового пользователя уходят Google.
+// Запуск: gradlew onlineAiTest. Ответы Gemini записываются в build/online-ai/.
+tasks.register('onlineAiTest', Test) {
+    description = 'Online run of the AI assistant against real Gemini'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'online'
+    }
+    workingDir = projectDir
+    outputs.upToDateWhen { false }
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = true
+    }
+    jvmArgs '-Dnet.bytebuddy.experimental=true', '-XX:+EnableDynamicAgentLoading'
 }
 
 tasks.named('jar') {

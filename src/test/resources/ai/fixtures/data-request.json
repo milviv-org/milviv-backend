@@ -1,0 +1,41 @@
+{
+  "contractVersion": "assistant.v1",
+  "outcome": "DATA_REQUEST",
+  "dataRequestReason": "Найти задачи по грамматике",
+  "dataRequests": [
+    {
+      "query": "LIST_GOALS"
+    },
+    {
+      "query": "LIST_PROJECTS",
+      "goal": "g_k7Qx",
+      "status": "ACTIVE"
+    },
+    {
+      "query": "LIST_TASKS",
+      "project": "p_2mZa",
+      "goal": null,
+      "unassigned": null,
+      "status": "ACTIVE",
+      "period": {
+        "from": "2026-10-01",
+        "to": "2026-10-31"
+      }
+    },
+    {
+      "query": "LIST_REWARDS"
+    },
+    {
+      "query": "LIST_PLANS",
+      "period": {
+        "from": "2026-10-17",
+        "to": "2026-10-24"
+      }
+    },
+    {
+      "query": "LIST_REFLECTIONS",
+      "task": "t_9fLm",
+      "period": null
+    }
+  ]
+}

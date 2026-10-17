@@ -113,6 +113,25 @@ public class ConfigLoader {
     }
 
     /**
+     * Секрет: только переменная окружения или .env, никогда не application.properties (OC-01).
+     *
+     * @return null — не задан
+     */
+    public String getSecret(String envKey) {
+        String sysEnv = System.getenv(envKey);
+        if (sysEnv != null && !sysEnv.isEmpty()) {
+            return sysEnv;
+        }
+        if (dotenv != null) {
+            String dotenvValue = dotenv.get(envKey);
+            if (dotenvValue != null && !dotenvValue.isEmpty()) {
+                return dotenvValue;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Get configuration value with default fallback.
      */
     public String get(String envKey, String propertyKey, String defaultValue) {

@@ -1,0 +1,5 @@
+{
+  "contractVersion": "assistant.v1",
+  "outcome": "REFUSED",
+  "refusalReason": "UNSUPPORTED_OPERATION"
+}

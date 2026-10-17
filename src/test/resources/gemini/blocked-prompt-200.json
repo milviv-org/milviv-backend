@@ -1,0 +1,9 @@
+{
+  "promptFeedback": {
+    "blockReason": "PROHIBITED_CONTENT"
+  },
+  "usageMetadata": {
+    "promptTokenCount": 1200,
+    "totalTokenCount": 1200
+  }
+}
