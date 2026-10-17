@@ -25,6 +25,8 @@ import com.milviv.application.ai.ExecuteAiPlan;
 import com.milviv.application.ai.AiTurnValidator;
 import com.milviv.application.ai.DecideAiProposal;
 import com.milviv.application.ai.PreviewBuilder;
+import com.milviv.application.ai.ProviderQuotaBreaker;
+import com.milviv.application.ai.AiUsageQuota;
 import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.application.gamification.HiddenRewardsAccess;
 import com.milviv.application.gamification.PointsQueries;
@@ -256,6 +258,9 @@ public class Main {
                     .register(ExecuteAiPlan.class)
                     .register(AiDataCatalog.class)
                     .register(PreviewBuilder.class)
+                    .register(AiUsageQuota.class)
+                    // один на процесс: предохранитель квоты провайдера общий для всех запросов
+                    .register(ProviderQuotaBreaker.class)
                     .register(HandleAiRequest.class)
                     .register(DecideAiProposal.class);
 

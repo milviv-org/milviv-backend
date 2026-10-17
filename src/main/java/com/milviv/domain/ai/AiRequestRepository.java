@@ -1,5 +1,6 @@
 package com.milviv.domain.ai;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +28,15 @@ public interface AiRequestRepository {
 
     /** Новые первыми. */
     List<AiRequest> findByUser(UUID userId, int limit, int offset);
+
+    /** Когда начаты запросы пользователя с момента since — для квот; старые первыми. */
+    List<Instant> findStartTimesSince(UUID userId, Instant since);
+
+    /** Сколько создано запросом, начатым в startedAt. */
+    record Creations(Instant startedAt, int count) {}
+
+    /** Созданное через AI в запросах, начатых с момента since (по CREATED в отчётах); старые первыми. */
+    List<Creations> findCreationsSince(UUID userId, Instant since);
 
     /** Версия не совпала — OptimisticLockException. */
     void update(AiRequest request);

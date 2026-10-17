@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.milviv.domain.exception.AppException;
+import com.milviv.domain.exception.RetryAfter;
 import com.milviv.domain.exception.ValidationException;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -46,6 +47,12 @@ public class ErrorMapper {
             Map<String, Object> ext = null;
             if (ae instanceof ValidationException ve) {
                 ext = Map.of("errors", ve.getErrors()); // явно решаем что показать
+            }
+            if (ae instanceof RetryAfter ra && ra.getRetryAfter() != null) {
+                // целые секунды с округлением вверх: раньше срока повтор снова получит отказ
+                long seconds = Math.max(1, (ra.getRetryAfter().toMillis() + 999) / 1000);
+                ext = Map.of("retryAfterSeconds", seconds);
+                ctx.getResponse().setHeader("Retry-After", Long.toString(seconds));
             }
 
             ctx.json(

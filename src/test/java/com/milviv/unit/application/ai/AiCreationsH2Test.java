@@ -103,6 +103,10 @@ class AiCreationsH2Test {
         return new ExecuteAiPlan(c.goals(), c.projects(), c.tasks(), c.rewards(), tx);
     }
 
+    static com.milviv.application.ai.AiUsageQuota usageQuota(TransactionalConnectionProvider connections, AiLimits limits) {
+        return new com.milviv.application.ai.AiUsageQuota(new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER), limits);
+    }
+
     static PreviewBuilder previewBuilder(TransactionalConnectionProvider connections, TransactionManager tx, Clock clock) {
         Commands c = commands(connections, tx, clock);
         return new PreviewBuilder(c.goals(), c.projects(), c.tasks(), c.rewards());
@@ -140,7 +144,7 @@ class AiCreationsH2Test {
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
                 executeAiPlan(connections, tx, clock), previewBuilder(connections, tx, clock), catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER),
-                limits, tx, clock);
+                limits, AiCreationsH2Test.usageQuota(connections, limits), new com.milviv.application.ai.ProviderQuotaBreaker(limits), tx, clock);
     }
 
     private HandleAiRequest handler(FakeAiAssistant ai) {

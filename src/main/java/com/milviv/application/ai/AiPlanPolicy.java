@@ -88,6 +88,26 @@ public class AiPlanPolicy {
 
     // ─── Количества созданий ──────────────────────────────────────────────────
 
+    /** Сколько сущностей план создаст: существующие цель и проекты не в счёт. */
+    public static int countCreates(PlanDraft plan) {
+        PlanDraft.Create create = plan == null ? null : plan.create();
+        if (create == null) {
+            return 0;
+        }
+        GoalNode goal = create.goal();
+        List<ProjectNode> projects = new ArrayList<>(list(create.projects()));
+        int count = list(create.tasks()).size() + list(create.rewards()).size();
+        if (goal != null) {
+            count += goal.existing() == null ? 1 : 0;
+            count += list(goal.tasks()).size();
+            projects.addAll(list(goal.projects()));
+        }
+        for (ProjectNode project : projects) {
+            count += (project.existing() == null ? 1 : 0) + list(project.tasks()).size();
+        }
+        return count;
+    }
+
     private static boolean isEmpty(PlanDraft.Create create) {
         return create.goal() == null && list(create.projects()).isEmpty() && list(create.tasks()).isEmpty()
                 && list(create.rewards()).isEmpty();

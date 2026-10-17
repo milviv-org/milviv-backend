@@ -148,6 +148,50 @@ public class AiRequestJdbcRepository implements AiRequestRepository {
     }
 
     @Override
+    public List<Instant> findStartTimesSince(UUID userId, Instant since) {
+        String sql = "SELECT created_at FROM ai_requests WHERE user_id = ? AND created_at >= ? ORDER BY created_at";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setTimestamp(2, Timestamp.from(since));
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Instant> result = new ArrayList<>();
+                while (rs.next()) {
+                    result.add(rs.getTimestamp("created_at").toInstant());
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to read AI request times", ex);
+        }
+    }
+
+    /** Отчёт разбирается в Java: за сутки у пользователя считанные запросы, а SQL по JSONB в H2 нет. */
+    @Override
+    public List<Creations> findCreationsSince(UUID userId, Instant since) {
+        String sql = "SELECT created_at, result FROM ai_requests WHERE user_id = ? AND created_at >= ? "
+                + "AND result IS NOT NULL ORDER BY created_at";
+        try (PreparedStatement ps = connectionProvider.get().prepareStatement(sql)) {
+            ps.setObject(1, userId);
+            ps.setTimestamp(2, Timestamp.from(since));
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Creations> result = new ArrayList<>();
+                while (rs.next()) {
+                    OperationReport report = fromJson(rs.getString("result"));
+                    int created = (int) report.items().stream()
+                            .filter(item -> item.result() == OperationReport.Result.CREATED)
+                            .count();
+                    if (created > 0) {
+                        result.add(new Creations(rs.getTimestamp("created_at").toInstant(), created));
+                    }
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException("Failed to read AI creations", ex);
+        }
+    }
+
+    @Override
     public void update(AiRequest request) {
         String sql = """
             UPDATE ai_requests

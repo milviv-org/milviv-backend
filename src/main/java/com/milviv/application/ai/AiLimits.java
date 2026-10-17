@@ -46,5 +46,13 @@ public record AiLimits(Request request, Data data, Plan plan) {
             int dataRequestReasonMaxLength,
             int dateHorizonYears,
             int rewardCostMax
-    ) {}
+    ) {
+
+        /** Те же лимиты с другим пределом созданий — например, с остатком суточного лимита. */
+        public Plan withMaxCreates(int value) {
+            return new Plan(value, maxUpdates, maxDeletes, maxProjects, maxTasksPerNode, maxTasksTotal, maxRewards,
+                    titleMaxLength, descriptionMaxLength, summaryMaxLength, answerMaxLength, clarificationMaxLength,
+                    dataRequestReasonMaxLength, dateHorizonYears, rewardCostMax);
+        }
+    }
 }

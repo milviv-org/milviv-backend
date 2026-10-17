@@ -36,7 +36,8 @@ import com.milviv.domain.exception.ValidationException;
  * Фаза 1 AI-запроса (§5, §17): согласие → повтор и активный запрос → вызовы AI → итог.
  *
  * Три шага, две короткие транзакции:
- * 1. tx: блокировка пользователя, Idempotency-Key, один активный запрос → PENDING_AI;
+ * 1. tx: блокировка пользователя, Idempotency-Key, один активный запрос, предохранитель квоты провайдера,
+ *    квота пользователя → PENDING_AI;
  * 2. вызовы AI — вне транзакции (AD-08, инвариант 9);
  * 3. tx: итог записывается, только если запрос всё ещё PENDING_AI.
  *
@@ -62,13 +63,15 @@ public class HandleAiRequest {
     private final AiDataCatalog catalog;
     private final AiRequestRepository requests;
     private final AiLimits limits;
+    private final AiUsageQuota usageQuota;
+    private final ProviderQuotaBreaker breaker;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public HandleAiRequest(AiConsentService consentService, AiAssistantPort assistant, AiTurnValidator validator,
                            ExecuteAiPlan executeAiPlan, PreviewBuilder previewBuilder, AiDataCatalog catalog,
-                           AiRequestRepository requests, AiLimits limits, TransactionManager transactionManager,
-                           Clock clock) {
+                           AiRequestRepository requests, AiLimits limits, AiUsageQuota usageQuota,
+                           ProviderQuotaBreaker breaker, TransactionManager transactionManager, Clock clock) {
         this.consentService = consentService;
         this.assistant = assistant;
         this.validator = validator;
@@ -77,6 +80,8 @@ public class HandleAiRequest {
         this.catalog = catalog;
         this.requests = requests;
         this.limits = limits;
+        this.usageQuota = usageQuota;
+        this.breaker = breaker;
         this.transactionManager = transactionManager;
         this.clock = clock;
     }
@@ -99,8 +104,12 @@ public class HandleAiRequest {
     /** Итог разговора с AI, который запишется в транзакции 3. */
     private record Outcome(AiTurn turn, Code failure, AiRequest.Usage usage, Conversation conversation) {}
 
-    /** Ход 1: либо новый запрос, либо уже существующий (повтор). */
-    private record Start(AiRequest request, boolean replay) {}
+    /**
+     * Ход 1: либо новый запрос, либо уже существующий (повтор).
+     *
+     * @param createsLeft сколько ещё можно создать через AI в текущих сутках
+     */
+    private record Start(AiRequest request, boolean replay, int createsLeft) {}
 
     /**
      * @throws AiRequestException запрос завершился ошибкой (в том числе при повторе — та же ошибка)
@@ -127,7 +136,7 @@ public class HandleAiRequest {
             return result(start.request(), false);
         }
 
-        Outcome outcome = converse(userId, message, startedAt);
+        Outcome outcome = converse(userId, message, startedAt, start.createsLeft());
         UUID requestId = start.request().getId();
         AiRequest finished;
         try {
@@ -177,7 +186,7 @@ public class HandleAiRequest {
             } else if (request.isPending()) {
                 throw new AiRequestException(Code.AI_REQUEST_IN_PROGRESS);
             }
-            return new Start(request, true);
+            return new Start(request, true, 0);
         }
 
         var pending = requests.findPending(userId);
@@ -189,10 +198,17 @@ public class HandleAiRequest {
             markStale(pending.get());
         }
 
+        // квота провайдера исчерпана — незачем записывать запрос и вызывать AI (§8)
+        var breakerOpen = breaker.retryAfter(now);
+        if (breakerOpen.isPresent()) {
+            throw AiRequestException.providerQuotaExhausted(breakerOpen.get());
+        }
+        AiUsageQuota.Allowance allowance = usageQuota.check(userId, now);
+
         AiRequest request = AiRequest.start(userId, idempotencyKey, hash, messageLength, hash,
                 AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION, assistant.provider(), assistant.model(), now);
         requests.add(request);
-        return new Start(request, false);
+        return new Start(request, false, allowance.createsLeft());
     }
 
     private void markStale(AiRequest request) {
@@ -203,7 +219,9 @@ public class HandleAiRequest {
 
     // ─── Вызовы AI, вне транзакции ────────────────────────────────────────────
 
-    private Outcome converse(UUID userId, String message, Instant startedAt) {
+    /** @param createsLeft остаток суточного лимита созданий: AI видит его как maxCreates, план больше — отказ */
+    private Outcome converse(UUID userId, String message, Instant startedAt, int createsLeft) {
+        AiLimits.Plan planLimits = limits.plan().withMaxCreates(Math.min(limits.plan().maxCreates(), createsLeft));
         Duration timeout = limits.request().requestTimeout();
         Conversation conversation = new Conversation(limits.data().maxTokens());
         LocalDate today = LocalDate.ofInstant(startedAt, ZoneOffset.UTC);
@@ -225,7 +243,7 @@ public class HandleAiRequest {
             calls++;
             try {
                 reply = assistant.nextTurn(new AiPrompt(AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION,
-                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, limits.plan(),
+                        LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, planLimits,
                         List.copyOf(conversation.rounds)));
             } catch (AiProviderException ex) {
                 Code code = switch (ex.getKind()) {
@@ -236,6 +254,9 @@ public class HandleAiRequest {
                     case REFUSED -> Code.AI_REFUSED;
                     case MALFORMED, OUTPUT_TRUNCATED -> null;
                 };
+                if (ex.getKind() == AiProviderException.Kind.QUOTA_EXHAUSTED) {
+                    breaker.open(clock.instant());
+                }
                 if (code != null) {
                     return failure(code, calls, tokens, startedAt, conversation);
                 }
@@ -270,6 +291,10 @@ public class HandleAiRequest {
                         conversation.accessLog.add(new DataAccess(result.query(), result.items().size(), round.reason())));
                 violations = List.of();
                 continue;
+            }
+            // суточный лимит созданий: как и слишком большой план, не исправляется повтором (T-1)
+            if (verdict.ok() && turn instanceof AiTurn.Proposal p && AiPlanPolicy.countCreates(p.plan()) > createsLeft) {
+                return failure(Code.AI_QUOTA_EXCEEDED, calls, tokens, startedAt, conversation);
             }
             if (verdict.ok()) {
                 return new Outcome(turn, null, tokens.usage(calls, startedAt, clock.instant()), conversation);
@@ -374,9 +399,14 @@ public class HandleAiRequest {
     private Result result(AiRequest request, boolean created) {
         if (request.getStatus() == AiRequestStatus.FAILED) {
             Code code = Code.valueOf(request.getErrorCode());
-            throw code == Code.AI_REFUSED
-                    ? AiRequestException.refused(request.getRefusalReason() != null ? request.getRefusalReason() : RefusalReason.OTHER)
-                    : new AiRequestException(code);
+            throw switch (code) {
+                case AI_REFUSED -> AiRequestException.refused(
+                        request.getRefusalReason() != null ? request.getRefusalReason() : RefusalReason.OTHER);
+                // срок известен, только пока открыт предохранитель; срок квоты пользователя не хранится
+                case AI_PROVIDER_QUOTA_EXHAUSTED ->
+                        AiRequestException.providerQuotaExhausted(breaker.retryAfter(clock.instant()).orElse(null));
+                default -> new AiRequestException(code);
+            };
         }
         return new Result(AiRequestView.from(request, clock.instant()), created);
     }

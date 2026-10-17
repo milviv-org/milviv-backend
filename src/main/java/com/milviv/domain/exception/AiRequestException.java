@@ -1,15 +1,18 @@
 package com.milviv.domain.exception;
 
+import java.time.Duration;
+
 import com.milviv.domain.ai.RefusalReason;
 
 /**
  * Ошибки AI-запроса (§11). Код хранится в ai_requests.error_code, поэтому повтор
  * завершённого с ошибкой запроса восстанавливает ту же ошибку.
  */
-public class AiRequestException extends DomainException {
+public class AiRequestException extends DomainException implements RetryAfter {
 
     public enum Code {
         AI_REQUEST_IN_PROGRESS("Предыдущий запрос ещё обрабатывается"),
+        AI_QUOTA_EXCEEDED("Лимит запросов к AI исчерпан, попробуйте позже"),
         IDEMPOTENCY_KEY_REUSED("Ключ запроса уже использован с другим сообщением"),
         AI_PROVIDER_UNAVAILABLE("AI временно недоступен"),
         AI_PROVIDER_QUOTA_EXHAUSTED("Бесплатный лимит AI исчерпан, попробуйте позже"),
@@ -31,14 +34,35 @@ public class AiRequestException extends DomainException {
     }
 
     private final Code code;
+    private final Duration retryAfter;
 
     public AiRequestException(Code code) {
-        this(code, code.message);
+        this(code, code.message, null);
     }
 
     private AiRequestException(Code code, String message) {
+        this(code, message, null);
+    }
+
+    private AiRequestException(Code code, String message, Duration retryAfter) {
         super(message);
         this.code = code;
+        this.retryAfter = retryAfter;
+    }
+
+    /** @param retryAfter через сколько лимит пользователя освободится; null — неизвестно */
+    public static AiRequestException quotaExceeded(Duration retryAfter) {
+        return new AiRequestException(Code.AI_QUOTA_EXCEEDED, Code.AI_QUOTA_EXCEEDED.message, retryAfter);
+    }
+
+    /** @param retryAfter через сколько закроется предохранитель квоты провайдера; null — неизвестно */
+    public static AiRequestException providerQuotaExhausted(Duration retryAfter) {
+        return new AiRequestException(Code.AI_PROVIDER_QUOTA_EXHAUSTED, Code.AI_PROVIDER_QUOTA_EXHAUSTED.message, retryAfter);
+    }
+
+    @Override
+    public Duration getRetryAfter() {
+        return retryAfter;
     }
 
     public static AiRequestException refused(RefusalReason reason) {

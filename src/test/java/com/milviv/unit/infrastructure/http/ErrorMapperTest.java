@@ -1,5 +1,6 @@
 package com.milviv.unit.infrastructure.http;
 
+import com.milviv.domain.exception.AiRequestException;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
@@ -121,5 +122,36 @@ class ErrorMapperTest {
         // then
         verify(ctx).json(eq(500), bodyCaptor.capture());
         assertThat(bodyCaptor.getValue().errorCode).isEqualTo("INTERNAL_SERVER_ERROR");
+    }
+
+    // ─── retryAfter (квоты AI) ────────────────────────────────────────────────
+
+    @Test
+    void handle_shouldAddRetryAfter_secondsRoundedUp() throws IOException {
+        jakarta.servlet.http.HttpServletResponse response = mock(jakarta.servlet.http.HttpServletResponse.class);
+        when(ctx.getResponse()).thenReturn(response);
+        AiRequestException ex = AiRequestException.quotaExceeded(java.time.Duration.ofMillis(41_200));
+        when(httpStatusResolver.resolve(ex)).thenReturn(429);
+        ArgumentCaptor<ErrorResponse> bodyCaptor = ArgumentCaptor.forClass(ErrorResponse.class);
+
+        errorMapper.handle(ex, ctx);
+
+        verify(ctx).json(eq(429), bodyCaptor.capture());
+        assertThat(bodyCaptor.getValue().errorCode).isEqualTo("AI_QUOTA_EXCEEDED");
+        assertThat(bodyCaptor.getValue().extension).containsEntry("retryAfterSeconds", 42L);
+        verify(response).setHeader("Retry-After", "42");
+    }
+
+    @Test
+    void handle_shouldNotAddRetryAfter_whenUnknown() throws IOException {
+        AiRequestException ex = new AiRequestException(AiRequestException.Code.AI_QUOTA_EXCEEDED);
+        when(httpStatusResolver.resolve(ex)).thenReturn(429);
+        ArgumentCaptor<ErrorResponse> bodyCaptor = ArgumentCaptor.forClass(ErrorResponse.class);
+
+        errorMapper.handle(ex, ctx);
+
+        verify(ctx).json(eq(429), bodyCaptor.capture());
+        assertThat(bodyCaptor.getValue().extension).isNull();
+        org.mockito.Mockito.verify(ctx, org.mockito.Mockito.never()).getResponse();
     }
 }

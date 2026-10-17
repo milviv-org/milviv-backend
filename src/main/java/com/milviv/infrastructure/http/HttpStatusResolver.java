@@ -20,6 +20,7 @@ public class HttpStatusResolver {
             Map.entry("DATABASE", HttpServletResponse.SC_SERVICE_UNAVAILABLE),
             Map.entry("AI_CONSENT_REQUIRED", HttpServletResponse.SC_FORBIDDEN),
             Map.entry("AI_REQUEST_IN_PROGRESS", HttpServletResponse.SC_CONFLICT),
+            Map.entry("AI_QUOTA_EXCEEDED", 429),
             Map.entry("IDEMPOTENCY_KEY_REUSED", 422),
             Map.entry("AI_PROVIDER_UNAVAILABLE", HttpServletResponse.SC_SERVICE_UNAVAILABLE),
             Map.entry("AI_PROVIDER_QUOTA_EXHAUSTED", HttpServletResponse.SC_SERVICE_UNAVAILABLE),

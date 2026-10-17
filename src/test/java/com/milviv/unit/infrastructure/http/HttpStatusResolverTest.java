@@ -48,6 +48,8 @@ class HttpStatusResolverTest {
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_REQUEST_IN_PROGRESS))).isEqualTo(409);
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.IDEMPOTENCY_KEY_REUSED))).isEqualTo(422);
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_PROVIDER_UNAVAILABLE))).isEqualTo(503);
+        assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_QUOTA_EXCEEDED))).isEqualTo(429);
+        assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_PROVIDER_QUOTA_EXHAUSTED))).isEqualTo(503);
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_TIMEOUT))).isEqualTo(504);
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_INVALID_RESPONSE))).isEqualTo(502);
         assertThat(resolver.resolve(new AiRequestException(AiRequestException.Code.AI_REFUSED))).isEqualTo(422);

@@ -129,7 +129,7 @@ class AiChangesH2Test {
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
                 AiCreationsH2Test.executeAiPlan(connections, tx, clock), AiCreationsH2Test.previewBuilder(connections, tx, clock),
                 AiCreationsH2Test.catalog(connections, limits, tx),
-                new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER), limits, tx, clock);
+                new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER), limits, AiCreationsH2Test.usageQuota(connections, limits), new com.milviv.application.ai.ProviderQuotaBreaker(limits), tx, clock);
     }
 
     /** AI читает проекты, задачи и награды, затем предлагает план по выданным дескрипторам. */

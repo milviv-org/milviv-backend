@@ -88,7 +88,7 @@ class HandleAiRequestH2Test {
                 AiCreationsH2Test.executeAiPlan(connections, tx, clock), AiCreationsH2Test.previewBuilder(connections, tx, clock),
                 AiCreationsH2Test.catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, MAPPER),
-                limits, tx, clock);
+                limits, AiCreationsH2Test.usageQuota(connections, limits), new com.milviv.application.ai.ProviderQuotaBreaker(limits), tx, clock);
     }
 
     private static Code code(Throwable ex) {
