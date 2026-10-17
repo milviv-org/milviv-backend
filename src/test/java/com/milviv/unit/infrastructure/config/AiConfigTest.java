@@ -124,4 +124,13 @@ class AiConfigTest {
         when(tasks.getInt(eq("AI_MAX_TASKS_TOTAL"), anyString(), anyInt())).thenReturn(50);
         assertThatThrownBy(() -> new AiConfig(tasks)).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void memoryLimits_haveDefaults_andMustBePositive() {
+        assertThat(new AiConfig(defaults()).toLimits().memory()).isEqualTo(new AiLimits.Memory(20, 500));
+
+        ConfigLoader loader = defaults();
+        when(loader.getInt(eq("AI_MEMORY_MAX_ITEMS"), anyString(), anyInt())).thenReturn(0);
+        assertThatThrownBy(() -> new AiConfig(loader)).hasMessageContaining("AI_MEMORY_MAX_ITEMS");
+    }
 }

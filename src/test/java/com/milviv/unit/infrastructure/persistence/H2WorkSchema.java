@@ -82,6 +82,10 @@ final class H2WorkSchema {
                 version BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMP, expires_at TIMESTAMP, executed_at TIMESTAMP,
                 UNIQUE (user_id, idempotency_key))""");
         st.execute("""
+            CREATE TABLE ai_memories (
+                id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL, created_at TIMESTAMP)""");
+        st.execute("""
             CREATE TABLE user_sound_settings (
                 user_id UUID NOT NULL, event VARCHAR(50) NOT NULL, sound VARCHAR(100) NOT NULL,
                 PRIMARY KEY (user_id, event))""");

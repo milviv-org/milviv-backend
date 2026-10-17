@@ -18,7 +18,7 @@ import com.milviv.domain.task.Difficulty;
 
 /**
  * Ход для AI (§6.1) — один JSON-документ на каждый вызов, без истории модели:
- * контекст, лимиты, каталог, сообщение пользователя, все раунды данных, замечания к прошлому ходу.
+ * контекст, лимиты, каталог, сообщение пользователя, его память AI, все раунды данных, замечания к прошлому ходу.
  *
  * Сообщение пользователя и данные — значения JSON, а не текст между тегами: экранирование не даёт
  * им «закрыть тег» и выдать себя за инструкцию (T-10). Что это данные, а не команды, говорит инструкция.
@@ -27,7 +27,7 @@ public class AiPromptRenderer {
 
     record Document(String contractVersion, String promptVersion, String locale, String timezone, LocalDate today,
                     int call, int maxDataRounds, int dataRoundsLeft, AiLimits.Plan limits, Catalog catalog,
-                    String userMessage, List<Round> dataRounds, List<String> violations) {}
+                    String userMessage, List<String> memories, List<Round> dataRounds, List<String> violations) {}
 
     record Catalog(List<DifficultyPoints> difficulty, List<QuerySpec> dataQueries, List<String> operations) {}
 
@@ -64,8 +64,8 @@ public class AiPromptRenderer {
                 .toList();
         Document document = new Document(prompt.contractVersion(), prompt.promptVersion(), prompt.locale(),
                 prompt.timezone(), prompt.today(), prompt.call(), maxDataRounds,
-                Math.max(0, maxDataRounds - rounds.size()), prompt.limits(), CATALOG, prompt.userMessage(), rounds,
-                prompt.violations());
+                Math.max(0, maxDataRounds - rounds.size()), prompt.limits(), CATALOG, prompt.userMessage(),
+                prompt.memories(), rounds, prompt.violations());
         try {
             return mapper.writeValueAsString(document);
         } catch (JsonProcessingException ex) {

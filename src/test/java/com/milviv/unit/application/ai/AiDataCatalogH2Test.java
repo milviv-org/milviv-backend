@@ -135,7 +135,7 @@ class AiDataCatalogH2Test {
 
     private static AiLimits limits(int maxItems, int textMaxLength) {
         AiLimits base = AiTurnValidatorTest.limits(4, Duration.ofSeconds(90));
-        return new AiLimits(base.request(), new AiLimits.Data(2, 3, maxItems, textMaxLength, 16_000), base.plan());
+        return new AiLimits(base.request(), new AiLimits.Data(2, 3, maxItems, textMaxLength, 16_000), base.plan(), base.memory());
     }
 
     private DataRound run(AiLimits limits, HandleRegistry registry, AiDataCatalog.Budget budget, DataQuery... queries) {

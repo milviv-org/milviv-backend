@@ -23,6 +23,7 @@ import com.milviv.application.ai.AiLimits;
 import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.ExecuteAiPlan;
 import com.milviv.application.ai.AiTurnValidator;
+import com.milviv.application.ai.AiMemoryCommands;
 import com.milviv.application.ai.DecideAiProposal;
 import com.milviv.application.ai.PreviewBuilder;
 import com.milviv.application.ai.ProviderQuotaBreaker;
@@ -48,6 +49,7 @@ import com.milviv.application.task.TaskCommands;
 import com.milviv.application.user.GetCurrentUser;
 import com.milviv.domain.auth.RefreshTokenRepository;
 import com.milviv.domain.ai.AiConsentRepository;
+import com.milviv.domain.ai.AiMemoryRepository;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.gamification.HiddenRewardsPasswordRepository;
 import com.milviv.domain.gamification.PointsHistoryRepository;
@@ -88,6 +90,7 @@ import com.milviv.infrastructure.persistence.connection.TransactionalConnectionP
 import com.milviv.infrastructure.ai.UnavailableAiAssistant;
 import com.milviv.infrastructure.ai.gemini.GeminiAssistantAdapter;
 import com.milviv.infrastructure.persistence.jdbc.AiConsentJdbcRepository;
+import com.milviv.infrastructure.persistence.jdbc.AiMemoryJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.AiRequestJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.GoalJdbcRepository;
 import com.milviv.infrastructure.persistence.jdbc.HiddenRewardsPasswordJdbcRepository;
@@ -113,6 +116,7 @@ import com.milviv.infrastructure.security.InMemoryLoginAttemptLimiter;
 import com.milviv.infrastructure.security.JwtAccessTokenService;
 import com.milviv.infrastructure.security.JwtCookieAuthenticator;
 import com.milviv.presentation.rest.controllers.AiConsentController;
+import com.milviv.presentation.rest.controllers.AiMemoryController;
 import com.milviv.presentation.rest.controllers.AiRequestController;
 import com.milviv.presentation.rest.controllers.AuthController;
 import com.milviv.presentation.rest.controllers.CalendarController;
@@ -244,6 +248,7 @@ public class Main {
             // AI
             container.singletone(AiLimits.class, container.get(AiConfig.class).toLimits());
             container.singletone(AiConsentRepository.class, new AiConsentJdbcRepository(connectionProvider));
+            container.singletone(AiMemoryRepository.class, new AiMemoryJdbcRepository(connectionProvider));
             container.singletone(AiRequestRepository.class, new AiRequestJdbcRepository(connectionProvider,
                     container.get(JacksonConfig.class).getObjectMapper()));
             // AI_PROVIDER=none — AI-запросы отвечают 503, приложение работает без ключа
@@ -262,7 +267,8 @@ public class Main {
                     // один на процесс: предохранитель квоты провайдера общий для всех запросов
                     .register(ProviderQuotaBreaker.class)
                     .register(HandleAiRequest.class)
-                    .register(DecideAiProposal.class);
+                    .register(DecideAiProposal.class)
+                    .register(AiMemoryCommands.class);
 
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск
@@ -304,6 +310,7 @@ public class Main {
                     SoundSettingsController.class,
                     AiConsentController.class,
                     AiRequestController.class,
+                    AiMemoryController.class,
                     HealthController.class
             );
 

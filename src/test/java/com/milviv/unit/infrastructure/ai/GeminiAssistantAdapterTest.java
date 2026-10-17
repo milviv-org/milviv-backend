@@ -115,7 +115,7 @@ class GeminiAssistantAdapterTest {
     private static AiPrompt prompt(Duration timeLeft) {
         AiPrompt base = AiPromptRendererTest.prompt("Какие задачи я просрочиваю?", List.of(), List.of());
         return new AiPrompt(base.contractVersion(), base.promptVersion(), base.locale(), base.timezone(), base.today(),
-                base.userMessage(), base.call(), base.violations(), timeLeft, base.limits(), base.rounds());
+                base.userMessage(), base.call(), base.violations(), timeLeft, base.limits(), base.rounds(), base.memories());
     }
 
     private static AiPrompt prompt() {

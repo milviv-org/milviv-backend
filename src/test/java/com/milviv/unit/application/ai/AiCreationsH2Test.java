@@ -144,7 +144,8 @@ class AiCreationsH2Test {
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
                 executeAiPlan(connections, tx, clock), previewBuilder(connections, tx, clock), catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER),
-                limits, AiCreationsH2Test.usageQuota(connections, limits), new com.milviv.application.ai.ProviderQuotaBreaker(limits), tx, clock);
+                limits, AiCreationsH2Test.usageQuota(connections, limits), new com.milviv.application.ai.ProviderQuotaBreaker(limits),
+                new com.milviv.infrastructure.persistence.jdbc.AiMemoryJdbcRepository(connections), tx, clock);
     }
 
     private HandleAiRequest handler(FakeAiAssistant ai) {
@@ -242,7 +243,7 @@ class AiCreationsH2Test {
         // на последнем узле, когда цель, проекты и задачи уже созданы в этой транзакции
         AiLimits base = AiTurnValidatorTest.limits(4, Duration.ofSeconds(90));
         AiLimits loose = new AiLimits(base.request(), base.data(), new AiLimits.Plan(40, 20, 10, 10, 10, 30, 3, 100, 1000,
-                500, 2000, 300, 200, 2, 2_000_000));
+                500, 2000, 300, 200, 2, 2_000_000), base.memory());
         Create create = englishGoal();
         Create tooExpensive = new Create(create.goal(), create.projects(), create.tasks(),
                 List.of(new RewardNode("Яхта", null, 1_500_000)));

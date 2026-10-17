@@ -82,7 +82,7 @@ class AiQuotaH2Test {
         AiLimits base = AiTurnValidatorTest.limits(4, Duration.ofSeconds(90));
         AiLimits.Request r = base.request();
         return new AiLimits(new AiLimits.Request(r.messageMaxLength(), perDay, perMinute, r.maxCallsPerRequest(),
-                r.requestTimeout(), r.planTtl(), createdPerDay, Duration.ofMinutes(60)), base.data(), base.plan());
+                r.requestTimeout(), r.planTtl(), createdPerDay, Duration.ofMinutes(60)), base.data(), base.plan(), base.memory());
     }
 
     private HandleAiRequest handler(FakeAiAssistant ai, AiLimits limits, ProviderQuotaBreaker breaker) {
@@ -91,7 +91,7 @@ class AiQuotaH2Test {
                 AiCreationsH2Test.catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER), limits,
                 new AiUsageQuota(new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER), limits),
-                breaker, tx, clock);
+                breaker, new com.milviv.infrastructure.persistence.jdbc.AiMemoryJdbcRepository(connections), tx, clock);
     }
 
     private HandleAiRequest handler(FakeAiAssistant ai, AiLimits limits) {

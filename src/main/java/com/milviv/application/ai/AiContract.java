@@ -4,7 +4,8 @@ package com.milviv.application.ai;
 public final class AiContract {
 
     public static final String CONTRACT_VERSION = "assistant.v1";
-    public static final String PROMPT_VERSION = "assistant@1";
+    /** @2 — инструкция учитывает память AI (9.8). */
+    public static final String PROMPT_VERSION = "assistant@2";
 
     private AiContract() {}
 }

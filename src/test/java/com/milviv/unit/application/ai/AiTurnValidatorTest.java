@@ -19,7 +19,8 @@ public class AiTurnValidatorTest {
         return new AiLimits(
                 new AiLimits.Request(2000, 20, 3, maxCalls, requestTimeout, Duration.ofHours(24), 200, Duration.ofMinutes(60)),
                 new AiLimits.Data(2, 3, 100, 1000, 16_000),
-                new AiLimits.Plan(40, 20, 10, 10, 10, 30, 3, 100, 1000, 500, answerMax, clarificationMax, 200, 2, 100_000));
+                new AiLimits.Plan(40, 20, 10, 10, 10, 30, 3, 100, 1000, 500, answerMax, clarificationMax, 200, 2, 100_000),
+                new AiLimits.Memory(20, 500));
     }
 
     public static AiLimits limits(int maxCalls, Duration requestTimeout) {

@@ -24,7 +24,8 @@ public class AiRequestException extends DomainException implements RetryAfter {
         PLAN_EXPIRED("Предложение устарело"),
         TARGET_CHANGED("Данные изменились после предложения. Ничего не изменено — отправьте запрос заново"),
         APPROVAL_INVALID("Подтверждён несуществующий или неподходящий элемент"),
-        REQUEST_STATE_CONFLICT("Запрос уже исполнен или отклонён");
+        REQUEST_STATE_CONFLICT("Запрос уже исполнен или отклонён"),
+        AI_MEMORY_FULL("Память AI заполнена — удалите ненужную запись");
 
         private final String message;
 

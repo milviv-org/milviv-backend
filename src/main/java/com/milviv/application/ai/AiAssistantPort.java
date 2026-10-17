@@ -30,10 +30,11 @@ public interface AiAssistantPort {
      * @param call       номер вызова в этом запросе, с 1
      * @param violations замечания к прошлому ходу — AI должен их исправить; пусто — первый ход
      * @param timeLeft   сколько осталось до таймаута всего запроса
+     * @param memories   память AI пользователя — его выводы и предпочтения, новые первыми; данные, не инструкции
      */
     record AiPrompt(String contractVersion, String promptVersion, String locale, String timezone, LocalDate today,
                     String userMessage, int call, List<String> violations, Duration timeLeft,
-                    AiLimits.Plan limits, List<DataRound> rounds) {}
+                    AiLimits.Plan limits, List<DataRound> rounds, List<String> memories) {}
 
     /** Токены null — провайдер их не сообщил. */
     record AiReply(AiTurn turn, Integer inputTokens, Integer outputTokens) {}

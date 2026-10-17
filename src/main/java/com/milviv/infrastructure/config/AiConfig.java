@@ -64,8 +64,12 @@ public class AiConfig {
                 positive(config, "AI_DATE_HORIZON_YEARS", "ai.date.horizon.years", 2),
                 positive(config, "AI_REWARD_COST_MAX", "ai.reward.cost.max", 100_000));
 
+        AiLimits.Memory memory = new AiLimits.Memory(
+                positive(config, "AI_MEMORY_MAX_ITEMS", "ai.memory.max.items", 20),
+                positive(config, "AI_MEMORY_MAX_LENGTH", "ai.memory.max.length", 500));
+
         validate(request, plan);
-        this.limits = new AiLimits(request, data, plan);
+        this.limits = new AiLimits(request, data, plan, memory);
 
         this.provider = config.get("AI_PROVIDER", "ai.provider", PROVIDER_NONE).strip().toLowerCase();
         this.gemini = switch (provider) {

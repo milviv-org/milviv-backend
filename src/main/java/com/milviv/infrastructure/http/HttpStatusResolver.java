@@ -32,7 +32,8 @@ public class HttpStatusResolver {
             Map.entry("PLAN_EXPIRED", HttpServletResponse.SC_GONE),
             Map.entry("TARGET_CHANGED", HttpServletResponse.SC_CONFLICT),
             Map.entry("APPROVAL_INVALID", 422),
-            Map.entry("REQUEST_STATE_CONFLICT", HttpServletResponse.SC_CONFLICT)
+            Map.entry("REQUEST_STATE_CONFLICT", HttpServletResponse.SC_CONFLICT),
+            Map.entry("AI_MEMORY_FULL", 422)
     );
 
     public int resolve(AppException e) {

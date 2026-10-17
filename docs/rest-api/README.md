@@ -48,6 +48,7 @@
 | `FORBIDDEN` | 403 | Нет прав на действие: неверный пароль скрытых наград или аккаунта |
 | `AI_CONSENT_REQUIRED` | 403 | Нет согласия на использование данных для AI |
 | `AI_REQUEST_IN_PROGRESS` | 409 | Предыдущий AI-запрос ещё обрабатывается |
+| `AI_MEMORY_FULL` | 422 | Память AI заполнена |
 | `AI_QUOTA_EXCEEDED` | 429 | Исчерпан лимит пользователя на AI; `extension.retryAfterSeconds` и `Retry-After` |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | `Idempotency-Key` уже использован с другим телом |
 | `AI_REFUSED` | 422 | AI отказался выполнять запрос |

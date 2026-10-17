@@ -20,6 +20,8 @@ import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.application.ai.contract.DataRound;
 import com.milviv.application.transaction.Propagation;
 import com.milviv.application.transaction.TransactionManager;
+import com.milviv.domain.ai.AiMemory;
+import com.milviv.domain.ai.AiMemoryRepository;
 import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
@@ -53,6 +55,9 @@ public class HandleAiRequest {
     static final String TIMEZONE = "UTC";
     static final String LOCALE = "ru-RU";
 
+    /** Запись журнала прочитанного: память AI передана провайдеру. */
+    static final String MEMORY_ACCESS = "MEMORY";
+
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("^[A-Za-z0-9_-]{1,100}$");
 
     private final AiConsentService consentService;
@@ -65,13 +70,15 @@ public class HandleAiRequest {
     private final AiLimits limits;
     private final AiUsageQuota usageQuota;
     private final ProviderQuotaBreaker breaker;
+    private final AiMemoryRepository memories;
     private final TransactionManager transactionManager;
     private final Clock clock;
 
     public HandleAiRequest(AiConsentService consentService, AiAssistantPort assistant, AiTurnValidator validator,
                            ExecuteAiPlan executeAiPlan, PreviewBuilder previewBuilder, AiDataCatalog catalog,
                            AiRequestRepository requests, AiLimits limits, AiUsageQuota usageQuota,
-                           ProviderQuotaBreaker breaker, TransactionManager transactionManager, Clock clock) {
+                           ProviderQuotaBreaker breaker, AiMemoryRepository memories, TransactionManager transactionManager,
+                           Clock clock) {
         this.consentService = consentService;
         this.assistant = assistant;
         this.validator = validator;
@@ -82,6 +89,7 @@ public class HandleAiRequest {
         this.limits = limits;
         this.usageQuota = usageQuota;
         this.breaker = breaker;
+        this.memories = memories;
         this.transactionManager = transactionManager;
         this.clock = clock;
     }
@@ -108,8 +116,9 @@ public class HandleAiRequest {
      * Ход 1: либо новый запрос, либо уже существующий (повтор).
      *
      * @param createsLeft сколько ещё можно создать через AI в текущих сутках
+     * @param memories    память AI пользователя на момент начала запроса
      */
-    private record Start(AiRequest request, boolean replay, int createsLeft) {}
+    private record Start(AiRequest request, boolean replay, int createsLeft, List<String> memories) {}
 
     /**
      * @throws AiRequestException запрос завершился ошибкой (в том числе при повторе — та же ошибка)
@@ -136,7 +145,7 @@ public class HandleAiRequest {
             return result(start.request(), false);
         }
 
-        Outcome outcome = converse(userId, message, startedAt, start.createsLeft());
+        Outcome outcome = converse(userId, message, startedAt, start.createsLeft(), start.memories());
         UUID requestId = start.request().getId();
         AiRequest finished;
         try {
@@ -186,7 +195,7 @@ public class HandleAiRequest {
             } else if (request.isPending()) {
                 throw new AiRequestException(Code.AI_REQUEST_IN_PROGRESS);
             }
-            return new Start(request, true, 0);
+            return new Start(request, true, 0, List.of());
         }
 
         var pending = requests.findPending(userId);
@@ -208,7 +217,10 @@ public class HandleAiRequest {
         AiRequest request = AiRequest.start(userId, idempotencyKey, hash, messageLength, hash,
                 AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION, assistant.provider(), assistant.model(), now);
         requests.add(request);
-        return new Start(request, false, allowance.createsLeft());
+        List<String> memory = memories.findByUser(userId, limits.memory().maxItems()).stream()
+                .map(AiMemory::content)
+                .toList();
+        return new Start(request, false, allowance.createsLeft(), memory);
     }
 
     private void markStale(AiRequest request) {
@@ -220,10 +232,14 @@ public class HandleAiRequest {
     // ─── Вызовы AI, вне транзакции ────────────────────────────────────────────
 
     /** @param createsLeft остаток суточного лимита созданий: AI видит его как maxCreates, план больше — отказ */
-    private Outcome converse(UUID userId, String message, Instant startedAt, int createsLeft) {
+    private Outcome converse(UUID userId, String message, Instant startedAt, int createsLeft, List<String> memory) {
         AiLimits.Plan planLimits = limits.plan().withMaxCreates(Math.min(limits.plan().maxCreates(), createsLeft));
         Duration timeout = limits.request().requestTimeout();
         Conversation conversation = new Conversation(limits.data().maxTokens());
+        if (!memory.isEmpty()) {
+            // память уходит провайдеру в каждом вызове — пользователь видит это в журнале прочитанного (§13)
+            conversation.accessLog.add(new DataAccess(MEMORY_ACCESS, memory.size(), null));
+        }
         LocalDate today = LocalDate.ofInstant(startedAt, ZoneOffset.UTC);
         Tokens tokens = new Tokens();
         List<String> violations = List.of();
@@ -244,7 +260,7 @@ public class HandleAiRequest {
             try {
                 reply = assistant.nextTurn(new AiPrompt(AiContract.CONTRACT_VERSION, AiContract.PROMPT_VERSION,
                         LOCALE, TIMEZONE, today, message, calls, violations, timeLeft, planLimits,
-                        List.copyOf(conversation.rounds)));
+                        List.copyOf(conversation.rounds), memory));
             } catch (AiProviderException ex) {
                 Code code = switch (ex.getKind()) {
                     case UNAVAILABLE, RATE_LIMITED -> Code.AI_PROVIDER_UNAVAILABLE;

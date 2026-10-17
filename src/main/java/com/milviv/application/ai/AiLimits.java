@@ -6,7 +6,7 @@ import java.time.Duration;
  * Лимиты AI (§8). Значения приходят из AiConfig; в коде сценариев чисел нет.
  * Провайдерские настройки (модель, ключ, HTTP-таймауты, ретраи) — отдельно, вместе с адаптером.
  */
-public record AiLimits(Request request, Data data, Plan plan) {
+public record AiLimits(Request request, Data data, Plan plan, Memory memory) {
 
     /** До вызова AI и на весь запрос. */
     public record Request(
@@ -28,6 +28,9 @@ public record AiLimits(Request request, Data data, Plan plan) {
             int textMaxLength,
             int maxTokens
     ) {}
+
+    /** Память AI: сколько записей и какой длины пользователь может сохранить. */
+    public record Memory(int maxItems, int maxLength) {}
 
     /** План, предложенный AI. Лимиты AI могут быть строже ручных, но не мягче (§8). */
     public record Plan(
