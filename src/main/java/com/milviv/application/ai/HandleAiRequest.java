@@ -24,7 +24,7 @@ import com.milviv.domain.ai.AiRequest;
 import com.milviv.domain.ai.AiRequestRepository;
 import com.milviv.domain.ai.AiRequestStatus;
 import com.milviv.domain.ai.DataAccess;
-import com.milviv.domain.ai.OperationReport;
+import com.milviv.domain.ai.ValidatedPlan;
 import com.milviv.domain.ai.RefusalReason;
 import com.milviv.domain.exception.AiRequestException;
 import com.milviv.domain.exception.AiRequestException.Code;
@@ -41,7 +41,8 @@ import com.milviv.domain.exception.ValidationException;
  * 3. tx: итог записывается, только если запрос всё ещё PENDING_AI.
  *
  * AI запрашивает данные из каталога (≤ maxRounds раундов), затем отвечает, уточняет, отказывается
- * или предлагает создания — они исполняются сразу, в транзакции 3 (G-25). Изменения и удаления — 9.5.
+ * или предлагает план. Создания исполняются сразу, в транзакции 3 (G-25); изменения и удаления
+ * попадают в карточку (PROPOSED) и ждут согласия пользователя — их исполняет DecideAiProposal.
  */
 public class HandleAiRequest {
 
@@ -57,6 +58,7 @@ public class HandleAiRequest {
     private final AiAssistantPort assistant;
     private final AiTurnValidator validator;
     private final ExecuteAiPlan executeAiPlan;
+    private final PreviewBuilder previewBuilder;
     private final AiDataCatalog catalog;
     private final AiRequestRepository requests;
     private final AiLimits limits;
@@ -64,12 +66,14 @@ public class HandleAiRequest {
     private final Clock clock;
 
     public HandleAiRequest(AiConsentService consentService, AiAssistantPort assistant, AiTurnValidator validator,
-                           ExecuteAiPlan executeAiPlan, AiDataCatalog catalog, AiRequestRepository requests,
-                           AiLimits limits, TransactionManager transactionManager, Clock clock) {
+                           ExecuteAiPlan executeAiPlan, PreviewBuilder previewBuilder, AiDataCatalog catalog,
+                           AiRequestRepository requests, AiLimits limits, TransactionManager transactionManager,
+                           Clock clock) {
         this.consentService = consentService;
         this.assistant = assistant;
         this.validator = validator;
         this.executeAiPlan = executeAiPlan;
+        this.previewBuilder = previewBuilder;
         this.catalog = catalog;
         this.requests = requests;
         this.limits = limits;
@@ -128,6 +132,9 @@ public class HandleAiRequest {
         AiRequest finished;
         try {
             finished = transactionManager.execute(() -> finish(userId, requestId, outcome));
+        } catch (AiRequestException ex) {
+            // сущность из плана изменилась после чтения AI: созданное откатилось вместе с транзакцией
+            finished = transactionManager.execute(() -> fail(userId, requestId, ex.getCode(), outcome));
         } catch (DomainException ex) {
             // правило домена нарушено при исполнении: созданное откатилось вместе с транзакцией (§10.1)
             finished = transactionManager.execute(() -> fail(userId, requestId, Code.BUSINESS_RULE_VIOLATION, outcome));
@@ -139,7 +146,7 @@ public class HandleAiRequest {
     public AiRequestView get(UUID userId, UUID requestId) {
         consentService.requireConsent(userId);
         return transactionManager.execute(Propagation.SUPPORTS, () -> requests.findById(userId, requestId))
-                .map(AiRequestView::from)
+                .map(request -> AiRequestView.from(request, clock.instant()))
                 .orElseThrow(() -> new NotFoundException("Запрос не найден"));
     }
 
@@ -149,7 +156,7 @@ public class HandleAiRequest {
         int from = Math.max(offset, 0);
         return transactionManager.execute(Propagation.SUPPORTS, () -> requests.findByUser(userId, pageSize, from))
                 .stream()
-                .map(AiRequestView::from)
+                .map(request -> AiRequestView.from(request, clock.instant()))
                 .toList();
     }
 
@@ -319,9 +326,17 @@ public class HandleAiRequest {
                 case AiTurn.Refused r -> request.refused(r.refusalReason(), outcome.usage());
                 case AiTurn.DataRequest d -> throw new IllegalStateException("DataRequest is handled in converse");
                 case AiTurn.Proposal p -> {
-                    OperationReport report = executeAiPlan.executeCreations(userId, p.plan().create(),
-                            outcome.conversation().registry);
-                    request.executed(p.summary(), p.answer(), report, outcome.usage(), clock.instant());
+                    HandleRegistry registry = outcome.conversation().registry;
+                    ExecuteAiPlan.Creations creations = executeAiPlan.executeCreations(userId, p.plan().create(), registry);
+                    if (p.plan().hasChanges()) {
+                        // карточка — после созданий: изменения могут ссылаться на новые проекты (n_*)
+                        ValidatedPlan plan = previewBuilder.build(userId, p.plan(), registry, creations.refs());
+                        Instant now = clock.instant();
+                        request.proposed(p.summary(), p.answer(), creations.report(), plan,
+                                now.plus(limits.request().planTtl()), outcome.usage());
+                    } else {
+                        request.executed(p.summary(), p.answer(), creations.report(), outcome.usage(), clock.instant());
+                    }
                 }
             }
         }
@@ -346,14 +361,14 @@ public class HandleAiRequest {
 
     // ─── Ответ ────────────────────────────────────────────────────────────────
 
-    private static Result result(AiRequest request, boolean created) {
+    private Result result(AiRequest request, boolean created) {
         if (request.getStatus() == AiRequestStatus.FAILED) {
             Code code = Code.valueOf(request.getErrorCode());
             throw code == Code.AI_REFUSED
                     ? AiRequestException.refused(request.getRefusalReason() != null ? request.getRefusalReason() : RefusalReason.OTHER)
                     : new AiRequestException(code);
         }
-        return new Result(AiRequestView.from(request), created);
+        return new Result(AiRequestView.from(request, clock.instant()), created);
     }
 
     private static String sha256(String text) {

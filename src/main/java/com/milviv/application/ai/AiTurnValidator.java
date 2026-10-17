@@ -8,6 +8,7 @@ import java.util.Objects;
 import com.milviv.application.ai.AiPlanPolicy.Verdict;
 import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.application.ai.contract.PlanDraft;
+import com.milviv.domain.ai.FieldChange;
 
 import static com.milviv.application.ai.contract.PlanDraft.list;
 
@@ -89,22 +90,54 @@ public class AiTurnValidator {
     // ─── Нормализация плана ───────────────────────────────────────────────────
 
     private static PlanDraft clean(PlanDraft plan) {
-        if (plan == null || plan.create() == null) {
-            return plan;
+        if (plan == null) {
+            return null;
         }
-        PlanDraft.Create c = plan.create();
+        List<PlanDraft.Delete> deletes = plan.delete() == null ? null
+                : plan.delete().stream().map(d -> d == null ? null : new PlanDraft.Delete(clean(d.target()))).toList();
+        return new PlanDraft(clean(plan.create()), clean(plan.update()), deletes);
+    }
+
+    private static PlanDraft.Create clean(PlanDraft.Create c) {
+        if (c == null) {
+            return null;
+        }
         PlanDraft.GoalNode goal = c.goal() == null ? null : new PlanDraft.GoalNode(clean(c.goal().existing()),
                 clean(c.goal().title()), clean(c.goal().description()), projects(c.goal().projects()), tasks(c.goal().tasks()));
         List<PlanDraft.RewardNode> rewards = list(c.rewards()).stream()
                 .map(r -> new PlanDraft.RewardNode(clean(r.title()), clean(r.description()), r.cost()))
                 .toList();
-        return new PlanDraft(new PlanDraft.Create(goal, projects(c.projects()), tasks(c.tasks()), rewards));
+        return new PlanDraft.Create(goal, projects(c.projects()), tasks(c.tasks()), rewards);
+    }
+
+    /** null внутри списков оставляется как есть — его отклонит AiPlanPolicy. */
+    private static PlanDraft.Update clean(PlanDraft.Update u) {
+        if (u == null) {
+            return null;
+        }
+        return new PlanDraft.Update(
+                list(u.tasks()).stream().map(t -> t == null || t.set() == null ? t : new PlanDraft.TaskUpdate(clean(t.target()),
+                        new PlanDraft.TaskSet(cleanChange(t.set().title()), cleanChange(t.set().description()),
+                                t.set().difficulty(), t.set().points(), t.set().startDate(), t.set().deadline(),
+                                cleanChange(t.set().project()), cleanChange(t.set().goal())))).toList(),
+                list(u.projects()).stream().map(p -> p == null || p.set() == null ? p : new PlanDraft.ProjectUpdate(clean(p.target()),
+                        new PlanDraft.ProjectSet(cleanChange(p.set().title()), cleanChange(p.set().description()),
+                                p.set().deadline(), cleanChange(p.set().goal())))).toList(),
+                list(u.goals()).stream().map(g -> g == null || g.set() == null ? g : new PlanDraft.GoalUpdate(clean(g.target()),
+                        new PlanDraft.GoalSet(cleanChange(g.set().title()), cleanChange(g.set().description())))).toList(),
+                list(u.rewards()).stream().map(r -> r == null || r.set() == null ? r : new PlanDraft.RewardUpdate(clean(r.target()),
+                        new PlanDraft.RewardSet(cleanChange(r.set().title()), cleanChange(r.set().description()),
+                                r.set().cost()))).toList());
+    }
+
+    private static FieldChange<String> cleanChange(FieldChange<String> change) {
+        return change == null ? null : new FieldChange<>(clean(change.value()));
     }
 
     private static List<PlanDraft.ProjectNode> projects(List<PlanDraft.ProjectNode> projects) {
         return list(projects).stream()
-                .map(p -> new PlanDraft.ProjectNode(clean(p.existing()), clean(p.title()), clean(p.description()),
-                        p.deadline(), tasks(p.tasks())))
+                .map(p -> new PlanDraft.ProjectNode(clean(p.ref()), clean(p.existing()), clean(p.title()),
+                        clean(p.description()), p.deadline(), tasks(p.tasks())))
                 .toList();
     }
 

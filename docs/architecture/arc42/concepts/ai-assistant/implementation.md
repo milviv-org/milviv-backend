@@ -12,7 +12,7 @@
 | 9.2 | Каркас запроса | `AiRequest` (состояния, идемпотентность, один активный запрос), `AiAssistantPort` + `FakeAiAssistant`, `HandleAiRequest` для исходов `ANSWER` / `CLARIFICATION_NEEDED` / `REFUSED`, `POST /ai/requests`, `GET /ai/requests/{id}`, зависшие `PENDING_AI` | ✅ |
 | 9.3 | Создания | Создающая часть `PlanDraft`, `AiResponseValidator` + `AiPolicy`, `ExecuteAiPlan` (фаза 1 через ручные сценарии, одна транзакция), отчёт | ✅ |
 | 9.4 | Каталог данных | `AiDataCatalog` (6 запросов, проекции, урезание, без скрытых наград), `HandleRegistry` (дескрипторы с версией), цикл ≤ 2 раундов, журнал прочитанного, создание внутри существующих целей и проектов | ✅ |
-| 9.5 | Изменения и удаления | Изменения и удаления в плане, `PreviewBuilder`, `PROPOSED`, `POST /ai/requests/{id}/execution` и `/rejection`, сверка версий (`TARGET_CHANGED`), правила дат на итоговом состоянии, TTL | ⏳ |
+| 9.5 | Изменения и удаления | Изменения и удаления в плане, `PreviewBuilder`, `PROPOSED`, `POST /ai/requests/{id}/execution` и `/rejection`, сверка версий (`TARGET_CHANGED`), правила дат на итоговом состоянии, TTL | ✅ |
 | 9.6 | Адаптер Gemini | Провайдерские ключи `AiConfig`, JDK `HttpClient`, промпт `assistant@1`, схема ответа, строгий разбор, таймауты, ретраи, `AiFailure`; тесты на HTTP-заглушке; онлайн-прогон ~25 сообщений (п. 10 [§17](README.md#17-final-architecture)) | ⏳ |
 | 9.7 | Квоты и предохранитель | Лимиты на пользователя (сутки, минута, созданий в сутки), предохранитель квоты провайдера | ⏳ |
 | 9.8 | Память AI | `ai_memories`. В концепции не описана — только в пользовательской доке; проектируется отдельно | ⏳ |
@@ -747,3 +747,267 @@ sequenceDiagram
   - `DataRequest` → данные попадают в следующий вызов → `Proposal` в существующий проект → задачи там, в отчёте только новые;
   - 3-й `DataRequest` → замечание → ответ; журнал и дескрипторы в БД; `dataAccessed` в ответе;
   - лимит вызовов при раундах данных.
+
+---
+
+## 9.5 Изменения и удаления ✅
+
+**Задача.** AI предлагает изменить и удалить существующие цели, проекты, задачи и нескрытые награды ([§6.5](contract.md)). Создания по-прежнему исполняются сразу (G-25). Изменения и удаления попадают в карточку и исполняются только после того, как пользователь отметит их галочкой (G-3, G-10), — вторым запросом `…/execution`.
+
+**В подэтап не входит:** провайдер Gemini (9.6), квоты (9.7), `audit_log` (K-7: решено не писать в 9.3).
+
+**Миграций нет:** `plan`, `decision`, `expires_at` уже есть в V14. `CANCELLED` уже есть в `OperationReport.Result`.
+
+### Классы
+
+| Класс | Слой | Ответственность |
+|-------|------|-----------------|
+| `PlanDraft` | application/ai/contract | + `update` (`tasks`, `projects`, `goals`, `rewards`; у каждого `target` + типизированный `set`), `delete[]` (`target`), `ProjectNode.ref` (`n_*`) |
+| `FieldChange<T>` | domain/ai | Поле в `set`: `null` — не менять, `{ "value": x }` — установить, `{ "value": null }` — очистить |
+| `ValidatedPlan` | domain/ai | Хранимое в `plan`: версия формата и ожидающие операции |
+| `PendingOperation` | domain/ai | `itemId` (`u1`, `d1`), `op` (UPDATE / DELETE), тип, ID цели, версия при чтении, название из БД, `EntityChanges` с уже разрешёнными ID |
+| `AiDecision` | domain/ai | Хранимое в `decision`: подтверждённые `itemId`, время решения — доказательство согласия ([§13](data.md)) |
+| `AiRequest` | domain/ai | + `proposed(…)`, `decided(…)`, `rejected(…)`, `expired()`, `isExpired(now)`; поля `plan`, `decision`, `expiresAt` |
+| `AiHandle` | domain/ai | + `projectId`; `deadline` теперь и у задачи — для проверки дат итогового состояния (решение 4) |
+| `AiPlanPolicy` | application/ai | + проверки изменений и удалений: дескрипторы, `ref`, белый список полей, конфликты, лимиты 20 / 10, даты итогового состояния |
+| `PreviewBuilder` | application/ai | Черновик → `ValidatedPlan`: дескриптор → ID, `n_*` → ID созданного проекта, название и версия — из БД |
+| `ExecuteAiPlan` | application/ai | `executeCreations` возвращает ещё `ref → ID`; новый `executeChanges(userId, plan, approved)` — через ручные `update` / `delete` в порядке K-9 |
+| `DecideAiProposal` | application/ai | `execute(userId, requestId, approvedIds)` и `reject(userId, requestId)`: согласие, блокировка запроса, состояние, TTL, повтор, проверка `approvedIds` |
+| `HandleAiRequest` | application/ai | + `Proposal` с изменениями: создания → `PreviewBuilder` → `PROPOSED` в той же транзакции 3 |
+| `AiRequestException.Code` | domain/exception | + `PLAN_EXPIRED` 410, `TARGET_CHANGED` 409, `APPROVAL_INVALID` 422, `REQUEST_STATE_CONFLICT` 409 |
+| `AiRequestRepository` | domain/ai | + `findByIdForUpdate` |
+| `AiRequestView` | application/ai | + `pendingApproval` (`itemId`, `op`, тип, название), `expiresAt`; просроченный `PROPOSED` показывается как `EXPIRED` |
+| `AiRequestController` | presentation | + `POST /ai/requests/{id}/execution`, `POST /ai/requests/{id}/rejection` |
+
+### Схема связей
+
+```mermaid
+classDiagram
+    direction LR
+
+    class AiRequestController {
+        +execution(id, approvedChangeIds)
+        +rejection(id)
+    }
+    class HandleAiRequest {
+        +execute(userId, key, message) Result
+    }
+    class DecideAiProposal {
+        +execute(userId, requestId, approvedIds) AiRequestView
+        +reject(userId, requestId) AiRequestView
+    }
+    class AiPlanPolicy {
+        +check(plan, today, registry) Verdict
+    }
+    class PreviewBuilder {
+        +build(userId, draft, registry, refs) ValidatedPlan
+    }
+    class ExecuteAiPlan {
+        +executeCreations(userId, create, registry) Creations
+        +executeChanges(userId, plan, approved) OperationReport
+    }
+    class HandleRegistry {
+        +resolve(handle, type) AiHandle
+    }
+    class AiRequest {
+        plan
+        decision
+        expiresAt
+        +proposed()
+        +decided()
+        +rejected()
+        +expired()
+    }
+    class ValidatedPlan {
+        <<record>>
+        format
+        operations
+    }
+    class PendingOperation {
+        <<record>>
+        itemId
+        op
+        targetId
+        expectedVersion
+        title
+        changes
+    }
+    class AiDecision {
+        <<record>>
+        approved
+        decidedAt
+    }
+    class ManualCommands {
+        GoalCommands
+        ProjectCommands
+        TaskCommands
+        RewardCommands
+    }
+
+    AiRequestController --> HandleAiRequest : POST /ai/requests
+    AiRequestController --> DecideAiProposal : execution, rejection
+    HandleAiRequest --> AiPlanPolicy
+    HandleAiRequest --> PreviewBuilder : фаза 1
+    HandleAiRequest --> ExecuteAiPlan : создания
+    AiPlanPolicy --> HandleRegistry : target, existing
+    PreviewBuilder --> HandleRegistry : дескриптор в ID
+    PreviewBuilder --> ManualCommands : get, название и версия
+    PreviewBuilder ..> ValidatedPlan : строит
+    DecideAiProposal --> ExecuteAiPlan : подтверждённое
+    DecideAiProposal ..> AiRequest : PROPOSED в EXECUTED или REJECTED
+    ExecuteAiPlan --> ManualCommands : create, update, delete
+    AiRequest --> ValidatedPlan
+    AiRequest --> AiDecision
+    ValidatedPlan --> PendingOperation
+```
+
+### Состояния
+
+```
+PENDING_AI ──► PROPOSED ──► EXECUTED   (подтверждено ≥ 1 изменение или удаление)
+                  │    ├──► REJECTED   (/rejection или пустой approvedChangeIds)
+                  │    └──► EXPIRED    (TTL 24 ч или другой формат плана)
+                  └─ ошибка исполнения → остаётся PROPOSED, ничего не изменено
+```
+
+`PROPOSED` не мешает новому запросу: «один активный» — только `PENDING_AI`. Два предложения, задевающие одну сущность, разводит сверка версий.
+
+### Как работает
+
+**Фаза 1** — `POST /ai/requests`, транзакция 3:
+1. `executeCreations` → отчёт о созданном + `n_* → ID` новых проектов.
+2. Изменений и удалений нет → `EXECUTED`, как в 9.3.
+3. Есть → `PreviewBuilder`: каждой операции `itemId` (`u1…`, `d1…`), ID из реестра, название и версия — из БД через ручной `get`. Сущность исчезла или изменилась после чтения → весь запрос `FAILED` / `TARGET_CHANGED`, созданное откатывается (решение 5).
+4. `AiRequest.proposed(summary, answer, report, plan, expiresAt = now + TTL)` → ответ `201` с отчётом и `pendingApproval`.
+
+**Фаза 2** — `POST /ai/requests/{id}/execution { "approvedChangeIds": ["u1"] }`:
+
+```mermaid
+sequenceDiagram
+    participant C as AiRequestController
+    participant D as DecideAiProposal
+    participant E as ExecuteAiPlan
+    participant M as Ручные сценарии
+    participant DB as Database
+
+    C->>D: execute(userId, id, approved)
+    D->>D: согласие
+    D->>DB: tx BEGIN, SELECT ai_requests FOR UPDATE (user_id)
+    D->>D: уже решён? тот же набор = 200, иначе 409
+    D->>D: просрочен? EXPIRED, COMMIT, 410
+    D->>D: approved только из pendingApproval? иначе 422
+    D->>E: executeChanges(подтверждённые)
+    E->>M: get каждой цели, версия = версии при чтении? иначе 409
+    E->>M: update в порядке K-9, затем delete
+    M->>DB: UPDATE, DELETE (version в WHERE)
+    E-->>D: UPDATED, DELETED + неподтверждённые CANCELLED
+    D->>DB: decided, decision, report, COMMIT
+    D-->>C: 200 AiRequestView
+```
+
+**Порядок исполнения (K-9, уточнён).** Ручные сценарии проверяют каждую операцию на текущем состоянии. Порядок подобран так, что промежуточное состояние допустимо, если допустимо итоговое:
+1. изменения целей и наград — с датами не связаны;
+2. проекты, чей срок не уменьшается (растёт, очищается, не меняется);
+3. изменения задач;
+4. удаления задач — до сокращения сроков: удалённая задача не должна мешать новому сроку проекта;
+5. проекты, чей срок уменьшается;
+6. удаления проектов, целей, наград.
+
+**Изменение — поверх текущего состояния.** `set` частичный, ручной `update` — полный. `ExecuteAiPlan` берёт текущую сущность через `get`, накладывает `FieldChange` и вызывает `update(…, expectedVersion = версия при чтении)`. Поля вне белого списка (`reminderAt`, статус, `hidden`) не трогаются.
+
+**Проверки плана (`AiPlanPolicy`)** — до исполнения созданий; ошибка → один повтор с замечаниями:
+
+| Проверка | Код |
+|----------|-----|
+| `target` не выдан или не того типа | `UNKNOWN_HANDLE` |
+| `set` пуст | `EMPTY_SET` |
+| одна цель в двух операциях | `DUPLICATE_TARGET` |
+| ссылка на удаляемое (`set.project`, `set.goal`, `existing`) | `REFERENCES_DELETED` |
+| `ref` не по формату, повтор, ссылка на несуществующий | `INVALID_REF`, `DUPLICATE_REF`, `UNKNOWN_REF` |
+| очистить `title`, `difficulty`, `cost` | `REQUIRED` |
+| длины, `points`, `cost`, горизонт дат | `MAX_LENGTH`, `RANGE`, `AFTER_HORIZON` |
+| срок задачи позже итогового срока её итогового проекта | `AFTER_PROJECT_DEADLINE` |
+| новый срок проекта раньше срока известной AI задачи в нём | `BEFORE_TASK_DEADLINE` |
+| > 20 изменений, > 10 удалений | `UPDATES_MAX`, `DELETES_MAX` → `AI_PLAN_TOO_LARGE`, без повтора |
+
+План без созданий, только с изменениями и удалениями, допустим; пустой целиком план → `plan: EMPTY`.
+
+### API
+
+```http
+POST /ai/requests/{id}/execution   { "approvedChangeIds": ["u1", "u3"] }  → 200
+POST /ai/requests/{id}/rejection                                           → 200
+```
+
+Ответ — тот же `AiRequestView`, что у `GET /ai/requests/{id}`:
+
+```json
+{ "requestId": "…", "status": "PROPOSED", "expiresAt": "2026-10-12T12:00:00Z",
+  "summary": "…", "report": [ { "itemId": "p1", "result": "CREATED", "type": "PROJECT", "id": "…", "title": "Чтение" } ],
+  "pendingApproval": [ { "itemId": "u1", "op": "UPDATE", "type": "TASK", "title": "Времена группы Simple" },
+                       { "itemId": "d1", "op": "DELETE", "type": "PROJECT", "title": "Старый" } ] }
+```
+
+После решения `pendingApproval` пуст, а в `report` дописаны `UPDATED` / `DELETED` / `CANCELLED`.
+
+| Ситуация | Ответ |
+|----------|-------|
+| нет согласия | `403 AI_CONSENT_REQUIRED` |
+| чужой или несуществующий запрос | `404 NOT_FOUND` |
+| запрос не `PROPOSED` и не решён этим же действием | `409 REQUEST_STATE_CONFLICT` |
+| повтор того же действия с тем же набором | `200`, то же тело |
+| истёк TTL | `410 PLAN_EXPIRED`, статус → `EXPIRED` |
+| `approvedChangeIds` нет в теле | `400 VALIDATION` |
+| ID не из `pendingApproval` | `422 APPROVAL_INVALID` |
+| версия цели изменилась, цель удалена | `409 TARGET_CHANGED`, ничего не изменено, остаётся `PROPOSED` |
+| итог нарушает правило домена | `422 BUSINESS_RULE_VIOLATION`, ничего не изменено, остаётся `PROPOSED` |
+
+### Решения на подтверждение
+
+1. **Частичный `set` накладывается на текущее состояние** в `ExecuteAiPlan` (`get` → наложить → ручной `update` с версией при чтении). Ручные сценарии не меняются.
+2. **Версии сверяются заранее, у всех подтверждённых целей**, до первого изменения — как в последовательности [§5](architecture.md). У ручного `delete` версии нет, поэтому для удалений сверка только эта. `update` дополнительно получает `expectedVersion`.
+3. **Порядок K-9 уточнён:** удаления задач — до сокращения сроков проектов (шаг 4). Без этого «удалить задачу и сократить срок проекта» падало бы, хотя итог допустим.
+4. **Даты итогового состояния до исполнения проверяются только по тому, что AI прочитал.** Для этого `AiHandle` хранит срок задачи и её проект. Задачи, которых AI не видел, проверит домен при исполнении → `422`. Альтернатива — пробное исполнение с откатом. Оно сложнее, а в фазе 2 проверка домена нужна всё равно: пользователь может подтвердить не всё.
+5. **Карточка строится в транзакции 3, после созданий.** Если сущность изменилась за секунды между чтением и карточкой — весь запрос `FAILED` / `TARGET_CHANGED`, созданное откатывается. Иначе карточка показала бы операцию, заведомо обречённую на `409`.
+6. **`ref` — только у нового проекта и только для `set.project` задачи** — по таблицам [§6.5](contract.md). В тексте там же сказано «перенести задачи **или проекты**», но у `GoalNode` поля `ref` нет, а `set.goal` принимает только `g_*`. Значит, перенести существующий проект в новую цель в v1 нельзя. Если нужно — добавлю `ref` цели.
+7. **Отчёт один на запрос:** к созданному дописываются `UPDATED` / `DELETED` / `CANCELLED`. Без `totals` и `reason` из [§6.7](user-flow.md): итоги клиент считает сам, а `CANCELLED` бывает только по одной причине — не подтверждено.
+8. **`…/execution` и `…/rejection` → `200`**, а не `201` из [§5](architecture.md): новый ресурс не создаётся. Повтор того же действия с тем же набором → `200` с тем же телом; иное → `409 REQUEST_STATE_CONFLICT`. Пустой `approvedChangeIds` → `REJECTED`.
+9. **TTL отсчитывается от `PROPOSED`.** `EXPIRED` записывается только при попытке решить (`410`). `GET` показывает `EXPIRED` вычислением, без записи. В `plan` хранится версия формата; другая версия после деплоя → считается просроченным ([§14](development.md)).
+10. **`TARGET_CHANGED` называет сущность по названию из карточки, кроме наград.** Награду, которую не удалось загрузить, могли сделать скрытой, поэтому сообщение без названия (G-5). Ошибка домена → `BUSINESS_RULE_VIOLATION` с текстом домена. После обеих ошибок статус остаётся `PROPOSED`: можно снять галочку с проблемной операции или отправить новый запрос ([§10.1](reliability.md)).
+11. **Параллельные решения** разводит `SELECT … FOR UPDATE` строки запроса: второе ждёт, затем видит итог первого и получает `200` (тот же набор) или `409`.
+12. **`audit_log` не пишется** (K-7). Доказательство согласия — `decision` в `ai_requests`.
+
+### Сверка с кодом (после реализации)
+
+- Классы, связи и последовательность — как в схемах. Решения 1–12 приняты. Миграций нет.
+- **`AiTargets`** — помощник (package-private), не было в таблице классов: текущие версия, название и срок цели операции через ручные `get`. Им пользуются и `PreviewBuilder`, и `ExecuteAiPlan`.
+- **`EntityChanges` — один record на все типы**, а не по типу: какие поля допустимы, уже решил `AiPlanPolicy`, а JSON в `plan` проще.
+- **Баллы задачи:** если AI не трогает `points`, остаются текущие — даже при смене сложности. В задаче хранится только итоговое число, признака «по сложности» нет. Пересчитать по сложности AI может явно: `points: { "value": null }`.
+- **`CANCELLED` в отчёте — с `id`:** сущность цела, фронтенд может дать ссылку. У `DELETED` `id` — `null`.
+- **`TARGET_CHANGED` называет текущее название из БД**, а не название из карточки. Исчезнувшая награда — без названия; видимая награда с новой версией — с названием.
+- **`AiHandle` для задач** хранит срок и проект при чтении (решение 4); каталог передаёт их при выдаче дескриптора.
+- **Пустой план** теперь `plan: EMPTY`, отсутствующий — `plan: REQUIRED` (было `plan.create: …`): план может состоять из одних изменений.
+- **Не проверено на PostgreSQL** (нет Docker): `SELECT … FOR UPDATE` строки запроса и JSONB `plan` / `decision`.
+
+### Тесты
+
+- `AiPlanPolicy`:
+  - каждый код из таблицы проверок;
+  - лимиты 20 / 10 → `tooLarge`;
+  - план только из изменений допустим;
+  - даты: перенос задачи в проект с более ранним сроком; сокращение срока проекта ниже срока известной задачи; ок, если в том же плане задаче сдвинут срок.
+- `PreviewBuilder` на H2: названия из БД, а не из текста AI; `n_*` → ID созданного проекта; сущность изменилась после чтения → `TARGET_CHANGED`.
+- `HandleAiRequest` + `FakeAiAssistant` на H2:
+  - создания + изменения → `PROPOSED`, созданное в БД, изменения — нет, `plan` и `expires_at` записаны;
+  - только создания → `EXECUTED`, как раньше.
+- `DecideAiProposal` на H2:
+  - подтверждено часть → `EXECUTED`, неподтверждённое `CANCELLED` и не исполнено, `decision` записан;
+  - пустой набор и `/rejection` → `REJECTED`, ничего не изменено, созданное осталось;
+  - повтор тем же набором → то же тело; другим набором или другим действием → `409`;
+  - чужой ID в наборе → `422`; чужой запрос → `404`;
+  - сущность изменили вручную → `409 TARGET_CHANGED`, ничего не изменено, остаётся `PROPOSED`;
+  - награду сделали скрытой → `409` без названия;
+  - TTL истёк → `410`, `EXPIRED`;
+  - K-9: «увеличить срок проекта + перенести задачу позже», «удалить задачу + сократить срок проекта», «сдвинуть задачу раньше + сократить срок» — проходят; «сократить срок без переноса задачи» (подтверждено не всё) → `422`, ничего не изменено;
+  - изменение не трогает поля вне белого списка (`reminderAt`, статус).
+- `AiRequestJdbcRepository`: `plan`, `decision`, `expires_at` — запись и чтение.

@@ -43,7 +43,8 @@ class HandleAiRequestH2Test {
 
     private static final Instant NOW = Instant.parse("2026-10-11T12:00:00Z");
     private static final String MESSAGE = "Какие задачи я чаще всего просрочиваю?";
-    static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
+    static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private Connection keepAlive;
     private JdbcDataSource dataSource;
@@ -84,7 +85,8 @@ class HandleAiRequestH2Test {
     private HandleAiRequest handler(FakeAiAssistant ai, int maxCalls) {
         var limits = AiTurnValidatorTest.limits(maxCalls, Duration.ofSeconds(90));
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
-                AiCreationsH2Test.executeAiPlan(connections, tx, clock), AiCreationsH2Test.catalog(connections, limits, tx),
+                AiCreationsH2Test.executeAiPlan(connections, tx, clock), AiCreationsH2Test.previewBuilder(connections, tx, clock),
+                AiCreationsH2Test.catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, MAPPER),
                 limits, tx, clock);
     }

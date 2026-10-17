@@ -179,7 +179,7 @@ public class AiDataCatalog {
 
     private DataItem taskItem(UUID userId, Task task, HandleRegistry registry) {
         return new DataRound.TaskItem(
-                registry.issue(EntityType.TASK, task.getId(), task.getVersion(), null),
+                registry.issue(EntityType.TASK, task.getId(), task.getVersion(), task.getDeadline(), task.getProjectId()),
                 task.getTitle(), cut(task.getDescription()), task.getStatus(), task.getDifficulty(), task.getPoints(),
                 task.getStartDate(), task.getDeadline(), task.getCompletedAt(),
                 projectHandle(userId, task.getProjectId(), registry), goalHandle(userId, task.getGoalId(), registry));
@@ -198,7 +198,7 @@ public class AiDataCatalog {
 
     private String taskHandle(UUID userId, UUID taskId, HandleRegistry registry) {
         return linked(taskId, registry, () -> tasks.findById(userId, taskId)
-                .map(t -> registry.issue(EntityType.TASK, t.getId(), t.getVersion(), null)));
+                .map(t -> registry.issue(EntityType.TASK, t.getId(), t.getVersion(), t.getDeadline(), t.getProjectId())));
     }
 
     private static String linked(UUID id, HandleRegistry registry, Supplier<Optional<String>> load) {

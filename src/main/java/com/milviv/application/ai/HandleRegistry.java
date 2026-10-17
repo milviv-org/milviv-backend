@@ -34,7 +34,7 @@ public class HandleRegistry {
 
     public HandleRegistry() {}
 
-    /** Восстановление сохранённых дескрипторов (9.5). */
+    /** Восстановление сохранённых дескрипторов. */
     public HandleRegistry(List<AiHandle> handles) {
         handles.forEach(h -> {
             byHandle.put(h.handle(), h);
@@ -42,21 +42,27 @@ public class HandleRegistry {
         });
     }
 
-    /**
-     * @param deadline срок проекта при чтении; у остальных типов null
-     * @return дескриптор; если объект уже получал его — тот же, с обновлённой версией
-     */
+    /** @param deadline срок проекта при чтении; у целей и наград null */
     public String issue(EntityType type, UUID id, long version, LocalDate deadline) {
+        return issue(type, id, version, deadline, null);
+    }
+
+    /**
+     * @param deadline  срок проекта или задачи при чтении
+     * @param projectId проект задачи при чтении; у остальных типов null
+     * @return дескриптор; если объект уже получал его — тот же, с обновлёнными данными
+     */
+    public String issue(EntityType type, UUID id, long version, LocalDate deadline, UUID projectId) {
         String existing = byId.get(id);
         if (existing != null) {
-            byHandle.put(existing, new AiHandle(existing, type, id, version, deadline));
+            byHandle.put(existing, new AiHandle(existing, type, id, version, deadline, projectId));
             return existing;
         }
         String handle;
         do {
             handle = prefix(type) + random();
         } while (byHandle.containsKey(handle));
-        byHandle.put(handle, new AiHandle(handle, type, id, version, deadline));
+        byHandle.put(handle, new AiHandle(handle, type, id, version, deadline, projectId));
         byId.put(id, handle);
         return handle;
     }
@@ -67,6 +73,11 @@ public class HandleRegistry {
             return Optional.empty();
         }
         return Optional.ofNullable(byHandle.get(handle)).filter(h -> h.type() == expected);
+    }
+
+    /** Дескриптор любого типа — для удалений, где тип задаёт сам дескриптор. */
+    public Optional<AiHandle> find(String handle) {
+        return handle == null ? Optional.empty() : Optional.ofNullable(byHandle.get(handle));
     }
 
     public Optional<String> handleOf(UUID id) {

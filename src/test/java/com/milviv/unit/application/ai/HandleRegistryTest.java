@@ -34,7 +34,7 @@ class HandleRegistryTest {
 
         assertThat(second).isEqualTo(first);
         assertThat(registry.resolve(first, EntityType.PROJECT)).get()
-                .isEqualTo(new AiHandle(first, EntityType.PROJECT, id, 2, LocalDate.parse("2026-12-01")));
+                .isEqualTo(new AiHandle(first, EntityType.PROJECT, id, 2, LocalDate.parse("2026-12-01"), null));
         assertThat(registry.snapshot()).hasSize(1);
     }
 
@@ -52,7 +52,7 @@ class HandleRegistryTest {
     @Test
     void restoredRegistry_resolvesSavedHandles() {
         UUID id = UUID.randomUUID();
-        HandleRegistry restored = new HandleRegistry(List.of(new AiHandle("t_Ab12", EntityType.TASK, id, 3, null)));
+        HandleRegistry restored = new HandleRegistry(List.of(new AiHandle("t_Ab12", EntityType.TASK, id, 3, null, null)));
 
         assertThat(restored.resolve("t_Ab12", EntityType.TASK)).get().extracting(AiHandle::id).isEqualTo(id);
         assertThat(restored.handleOf(id)).contains("t_Ab12");

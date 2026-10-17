@@ -257,10 +257,10 @@ Refresh-токены сессий входа. Хранится только хе
 | `idempotency_key` | VARCHAR(100) | Ключ повтора от клиента, уникален для пользователя |
 | `request_hash` | VARCHAR(64) | Хеш тела запроса: тот же ключ с другим телом — ошибка |
 | `message_length`, `message_hash` | INTEGER, VARCHAR(64) | Длина и хеш сообщения пользователя |
-| `handles` | JSONB | Дескрипторы, выданные AI: `[{handle, type, id, version, deadline}]`; `deadline` — срок проекта при чтении |
+| `handles` | JSONB | Дескрипторы, выданные AI: `[{handle, type, id, version, deadline, projectId}]`; `deadline` — срок проекта или задачи при чтении, `projectId` — проект задачи |
 | `data_access_log` | JSONB | Что AI прочитал: `[{query, items, reason}]`, без содержимого. Пишется при любом итоге запроса |
-| `plan` | JSONB | Проверенный план операций |
-| `decision` | JSONB | Подтверждённые пользователем изменения и удаления |
+| `plan` | JSONB | Изменения и удаления, ждущие согласия: `{format, operations: [{itemId, op, type, targetId, expectedVersion, title, changes}]}`. Только у `PROPOSED` и решённых |
+| `decision` | JSONB | Решение пользователя: `{approved: [itemId], decidedAt}` — доказательство согласия, хранится бессрочно |
 | `result` | JSONB | Отчёт об операциях: `[{itemId, result, type, id, title}]` |
 | `summary` | TEXT | Пояснение AI к операциям |
 | `answer` | TEXT | Текстовый ответ AI |
@@ -273,7 +273,7 @@ Refresh-токены сессий входа. Хранится только хе
 | `input_tokens`, `output_tokens` | INTEGER | Токены |
 | `latency_ms` | INTEGER | Длительность |
 | `version` | BIGINT | Версия |
-| `created_at`, `expires_at`, `executed_at` | TIMESTAMP | Создан, истекает, исполнен |
+| `created_at`, `expires_at`, `executed_at` | TIMESTAMP | Создан; до какого момента можно решить по карточке (`PROPOSED` + 24 ч); исполнен |
 
 ### ai_memories
 

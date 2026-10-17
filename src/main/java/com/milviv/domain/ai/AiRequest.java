@@ -13,7 +13,8 @@ import com.milviv.domain.shared.VersionedAggregate;
  *
  * Правила:
  * - из PENDING_AI выходит ровно один раз — в итоговый статус;
- * - PENDING_AI старше таймаута запроса считается зависшим (сервер упал во время вызова AI).
+ * - PENDING_AI старше таймаута запроса считается зависшим (сервер упал во время вызова AI);
+ * - PROPOSED ждёт решения пользователя до expiresAt; решение — одно (EXECUTED или REJECTED).
  */
 public class AiRequest extends VersionedAggregate {
 
@@ -44,6 +45,9 @@ public class AiRequest extends VersionedAggregate {
     private List<AiHandle> handles;
     private List<DataAccess> dataAccessLog;
     private int dataRounds;
+    private ValidatedPlan plan;
+    private AiDecision decision;
+    private Instant expiresAt;
 
     /** Восстановление из БД. Вызывается только репозиторием. */
     public AiRequest(UUID id, UUID userId, AiRequestStatus status, String idempotencyKey, String requestHash,
@@ -51,7 +55,8 @@ public class AiRequest extends VersionedAggregate {
                      RefusalReason refusalReason, String errorCode, String contractVersion, String promptVersion,
                      String provider, String model, int aiCalls, Integer inputTokens, Integer outputTokens,
                      Integer latencyMs, OperationReport report, List<AiHandle> handles, List<DataAccess> dataAccessLog,
-                     int dataRounds, Instant createdAt, Instant executedAt, long version) {
+                     int dataRounds, ValidatedPlan plan, AiDecision decision, Instant createdAt,
+                     Instant expiresAt, Instant executedAt, long version) {
         super(version);
         this.id = id;
         this.userId = userId;
@@ -77,7 +82,10 @@ public class AiRequest extends VersionedAggregate {
         this.handles = handles == null ? List.of() : List.copyOf(handles);
         this.dataAccessLog = dataAccessLog == null ? List.of() : List.copyOf(dataAccessLog);
         this.dataRounds = dataRounds;
+        this.plan = plan;
+        this.decision = decision;
         this.createdAt = createdAt;
+        this.expiresAt = expiresAt;
         this.executedAt = executedAt;
     }
 
@@ -86,7 +94,7 @@ public class AiRequest extends VersionedAggregate {
                                   String provider, String model, Instant now) {
         return new AiRequest(UUID.randomUUID(), userId, AiRequestStatus.PENDING_AI, idempotencyKey, requestHash,
                 messageLength, messageHash, null, null, null, null, null, contractVersion, promptVersion,
-                provider, model, 0, null, null, null, null, List.of(), List.of(), 0, now, null, 0L);
+                provider, model, 0, null, null, null, null, List.of(), List.of(), 0, null, null, now, null, null, 0L);
     }
 
     /** Расход на все вызовы AI в этом запросе. Токены null — провайдер их не сообщил. */
@@ -111,7 +119,7 @@ public class AiRequest extends VersionedAggregate {
     }
 
     /**
-     * План исполнен целиком: сейчас — только создания (G-25).
+     * План исполнен целиком: в нём были только создания (G-25).
      *
      * @param answer текст AI рядом с операциями (G-21); может быть null
      */
@@ -121,6 +129,54 @@ public class AiRequest extends VersionedAggregate {
         this.answer = answer;
         this.report = report;
         this.executedAt = now;
+    }
+
+    /**
+     * Создания исполнены, изменения и удаления ждут согласия пользователя (G-3).
+     *
+     * @param report    что уже создано
+     * @param expiresAt до какого момента можно решить (TTL плана)
+     */
+    public void proposed(String summary, String answer, OperationReport report, ValidatedPlan plan, Instant expiresAt,
+                         Usage usage) {
+        finish(AiRequestStatus.PROPOSED, usage);
+        this.summary = summary;
+        this.answer = answer;
+        this.report = report;
+        this.plan = plan;
+        this.expiresAt = expiresAt;
+    }
+
+    /** Истёк TTL или план сохранён в формате другой версии. */
+    public boolean isExpired(Instant now) {
+        return status == AiRequestStatus.PROPOSED
+                && (!now.isBefore(expiresAt) || plan.format() != ValidatedPlan.FORMAT);
+    }
+
+    public void expire() {
+        requireProposed();
+        this.status = AiRequestStatus.EXPIRED;
+    }
+
+    /**
+     * Решение пользователя: подтверждено хоть что-то — EXECUTED, ничего — REJECTED.
+     *
+     * @param report весь отчёт запроса: созданное + изменённое, удалённое, отменённое
+     */
+    public void decided(AiDecision decision, OperationReport report, Instant now) {
+        requireProposed();
+        this.status = decision.approved().isEmpty() ? AiRequestStatus.REJECTED : AiRequestStatus.EXECUTED;
+        this.decision = decision;
+        this.report = report;
+        if (status == AiRequestStatus.EXECUTED) {
+            this.executedAt = now;
+        }
+    }
+
+    private void requireProposed() {
+        if (status != AiRequestStatus.PROPOSED) {
+            throw new IllegalStateException("AiRequest " + id + " is " + status + ", not PROPOSED");
+        }
     }
 
     public void clarificationNeeded(String question, Usage usage) {
@@ -189,4 +245,7 @@ public class AiRequest extends VersionedAggregate {
     public List<AiHandle> getHandles()        { return handles; }
     public List<DataAccess> getDataAccessLog() { return dataAccessLog; }
     public int getDataRounds()                { return dataRounds; }
+    public ValidatedPlan getPlan()            { return plan; }
+    public AiDecision getDecision()           { return decision; }
+    public Instant getExpiresAt()             { return expiresAt; }
 }

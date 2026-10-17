@@ -17,6 +17,9 @@ public interface AiRequestRepository {
 
     Optional<AiRequest> findById(UUID userId, UUID requestId);
 
+    /** С блокировкой строки до конца транзакции: два решения по одной карточке идут по очереди. */
+    Optional<AiRequest> findByIdForUpdate(UUID userId, UUID requestId);
+
     Optional<AiRequest> findByIdempotencyKey(UUID userId, String idempotencyKey);
 
     /** Запрос в PENDING_AI — у пользователя он не больше одного. */

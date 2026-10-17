@@ -26,7 +26,11 @@ public class HttpStatusResolver {
             Map.entry("AI_INVALID_RESPONSE", HttpServletResponse.SC_BAD_GATEWAY),
             Map.entry("AI_REFUSED", 422),
             Map.entry("AI_PLAN_TOO_LARGE", 422),
-            Map.entry("BUSINESS_RULE_VIOLATION", 422)
+            Map.entry("BUSINESS_RULE_VIOLATION", 422),
+            Map.entry("PLAN_EXPIRED", HttpServletResponse.SC_GONE),
+            Map.entry("TARGET_CHANGED", HttpServletResponse.SC_CONFLICT),
+            Map.entry("APPROVAL_INVALID", 422),
+            Map.entry("REQUEST_STATE_CONFLICT", HttpServletResponse.SC_CONFLICT)
     );
 
     public int resolve(AppException e) {

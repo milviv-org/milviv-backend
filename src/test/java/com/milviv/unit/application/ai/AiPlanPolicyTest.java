@@ -1,5 +1,17 @@
 package com.milviv.unit.application.ai;
 
+import com.milviv.application.ai.contract.PlanDraft.Update;
+import com.milviv.application.ai.contract.PlanDraft.TaskUpdate;
+import com.milviv.application.ai.contract.PlanDraft.TaskSet;
+import com.milviv.application.ai.contract.PlanDraft.RewardUpdate;
+import com.milviv.application.ai.contract.PlanDraft.RewardSet;
+import com.milviv.application.ai.contract.PlanDraft.ProjectUpdate;
+import com.milviv.application.ai.contract.PlanDraft.ProjectSet;
+import com.milviv.application.ai.contract.PlanDraft.GoalUpdate;
+import com.milviv.application.ai.contract.PlanDraft.GoalSet;
+import com.milviv.application.ai.contract.PlanDraft.Delete;
+import com.milviv.domain.ai.FieldChange;
+import java.util.UUID;
 import com.milviv.domain.ai.OperationReport.EntityType;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -50,8 +62,9 @@ class AiPlanPolicyTest {
 
     @Test
     void emptyPlan_andMissingCreate_areViolations() {
-        assertThat(check(new Create(null, List.of(), null, null)).violations()).containsExactly("plan.create: EMPTY");
-        assertThat(policy.check(new PlanDraft(null), TODAY, new HandleRegistry()).violations()).containsExactly("plan.create: REQUIRED");
+        assertThat(check(new Create(null, List.of(), null, null)).violations()).containsExactly("plan: EMPTY");
+        assertThat(policy.check(null, TODAY, new HandleRegistry()).violations()).containsExactly("plan: REQUIRED");
+        assertThat(policy.check(new PlanDraft(null), TODAY, new HandleRegistry()).violations()).containsExactly("plan: EMPTY");
     }
 
     @Test
@@ -156,5 +169,152 @@ class AiPlanPolicyTest {
         }
         // 11 существующих проектов — не превышение PROJECTS_MAX(10): создаются только задачи
         assertThat(policy.check(new PlanDraft(new Create(null, existing, null, null)), TODAY, registry).tooLarge()).isFalse();
+    }
+
+    // ─── Изменения и удаления (9.5) ───────────────────────────────────────────
+
+    private static <T> FieldChange<T> to(T value) {
+        return new FieldChange<>(value);
+    }
+
+    private static TaskSet taskSet(FieldChange<String> title, FieldChange<LocalDate> deadline, FieldChange<String> project) {
+        return new TaskSet(title, null, null, null, null, deadline, project, null);
+    }
+
+    private static ProjectSet deadline(LocalDate deadline) {
+        return new ProjectSet(null, null, to(deadline), null);
+    }
+
+    private Verdict changes(HandleRegistry registry, Create create, Update update, List<Delete> deletes) {
+        return policy.check(new PlanDraft(create, update, deletes), TODAY, registry);
+    }
+
+    private static Update tasks(TaskUpdate... updates) {
+        return new Update(List.of(updates), null, null, null);
+    }
+
+    @Test
+    void planWithOnlyChanges_passes() {
+        HandleRegistry registry = new HandleRegistry();
+        String task = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null);
+        String reward = registry.issue(EntityType.REWARD, UUID.randomUUID(), 0, null);
+
+        Update update = new Update(List.of(new TaskUpdate(task, taskSet(to("Новое"), null, null))), null, null,
+                List.of(new RewardUpdate(reward, new RewardSet(null, null, to(500)))));
+        assertThat(changes(registry, null, update, null).violations()).isEmpty();
+    }
+
+    @Test
+    void targets_mustBeIssued_unique_andNotReferencedWhenDeleted() {
+        HandleRegistry registry = new HandleRegistry();
+        String task = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null);
+        String project = registry.issue(EntityType.PROJECT, UUID.randomUUID(), 0, null);
+        String goal = registry.issue(EntityType.GOAL, UUID.randomUUID(), 0, null);
+
+        Verdict verdict = changes(registry,
+                new Create(new GoalNode(goal, null, null, null, List.of(task("В удаляемую цель"))), null, null, null),
+                new Update(
+                        List.of(new TaskUpdate(task, taskSet(null, null, to(project))),
+                                new TaskUpdate(project, taskSet(to("x"), null, null)),
+                                new TaskUpdate("t_none", null)),
+                        null, null, null),
+                List.of(new Delete(project), new Delete(task), new Delete(goal), new Delete("g_none")));
+
+        assertThat(verdict.violations()).containsExactlyInAnyOrder(
+                "plan.delete[3].target: UNKNOWN_HANDLE",
+                "plan.delete[0].target: DUPLICATE_TARGET",
+                "plan.delete[1].target: DUPLICATE_TARGET",
+                "plan.create.goal.existing: REFERENCES_DELETED",
+                "plan.update.tasks[0].set.project: REFERENCES_DELETED",
+                "plan.update.tasks[1].target: UNKNOWN_HANDLE",
+                "plan.update.tasks[2].target: UNKNOWN_HANDLE",
+                "plan.update.tasks[2].set: EMPTY_SET");
+    }
+
+    @Test
+    void set_fields_areChecked() {
+        HandleRegistry registry = new HandleRegistry();
+        String task = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null);
+        String goal = registry.issue(EntityType.GOAL, UUID.randomUUID(), 0, null);
+        String reward = registry.issue(EntityType.REWARD, UUID.randomUUID(), 0, null);
+
+        Update update = new Update(
+                List.of(new TaskUpdate(task, new TaskSet(to(" "), to("x".repeat(1001)), to(null), to(1001),
+                        to(TODAY.plusDays(5)), to(TODAY.plusDays(1)), null, null))),
+                null,
+                List.of(new GoalUpdate(goal, new GoalSet(null, null))),
+                List.of(new RewardUpdate(reward, new RewardSet(null, null, to(null)))));
+
+        assertThat(changes(registry, null, update, null).violations()).containsExactlyInAnyOrder(
+                "plan.update.tasks[0].set.title: REQUIRED",
+                "plan.update.tasks[0].set.description: MAX_LENGTH(1000)",
+                "plan.update.tasks[0].set.difficulty: REQUIRED",
+                "plan.update.tasks[0].set.points: RANGE(1..1000)",
+                "plan.update.tasks[0].set.startDate: AFTER_DEADLINE",
+                "plan.update.goals[0].set: EMPTY_SET",
+                "plan.update.rewards[0].set.cost: REQUIRED");
+    }
+
+    @Test
+    void refs_nameNewProjects_forMovingTasks() {
+        HandleRegistry registry = new HandleRegistry();
+        String task = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null);
+        String other = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null);
+        String project = registry.issue(EntityType.PROJECT, UUID.randomUUID(), 0, null);
+
+        Create create = new Create(null, List.of(
+                new ProjectNode("n_read", null, "Чтение", null, null, null),
+                new ProjectNode("n_read", null, "Повтор", null, null, null),
+                new ProjectNode("Bad-Ref", null, "Плохой", null, null, null),
+                new ProjectNode("n_x", project, null, null, null, null)), null, null);
+        Update update = tasks(new TaskUpdate(task, taskSet(null, null, to("n_read"))),
+                new TaskUpdate(other, taskSet(null, null, to("n_none"))));
+
+        assertThat(changes(registry, create, update, null).violations()).containsExactlyInAnyOrder(
+                "plan.create.projects[1].ref: DUPLICATE_REF",
+                "plan.create.projects[2].ref: INVALID_REF",
+                "plan.create.projects[3]: EXISTING_WITH_FIELDS",
+                "plan.update.tasks[1].set.project: UNKNOWN_REF");
+    }
+
+    @Test
+    void tooManyUpdatesOrDeletes_isTooLarge() {
+        HandleRegistry registry = new HandleRegistry();
+        List<TaskUpdate> updates = new java.util.ArrayList<>();
+        List<Delete> deletes = new java.util.ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            updates.add(new TaskUpdate(registry.issue(EntityType.TASK, UUID.randomUUID(), 0, null, null), taskSet(to("t"), null, null)));
+        }
+        for (int i = 0; i < 11; i++) {
+            deletes.add(new Delete(registry.issue(EntityType.GOAL, UUID.randomUUID(), 0, null)));
+        }
+
+        Verdict verdict = changes(registry, null, new Update(updates, null, null, null), deletes);
+        assertThat(verdict.tooLarge()).isTrue();
+        assertThat(verdict.violations()).containsExactly("plan.update: UPDATES_MAX(20)", "plan.delete: DELETES_MAX(10)");
+    }
+
+    @Test
+    void dates_areCheckedOnFinalState_ofWhatAiRead() {
+        HandleRegistry registry = new HandleRegistry();
+        UUID projectId = UUID.randomUUID();
+        String project = registry.issue(EntityType.PROJECT, projectId, 0, TODAY.plusDays(30));
+        String early = registry.issue(EntityType.PROJECT, UUID.randomUUID(), 0, TODAY.plusDays(5));
+        String task = registry.issue(EntityType.TASK, UUID.randomUUID(), 0, TODAY.plusDays(20), projectId);
+
+        // перенос задачи в проект с более ранним сроком
+        assertThat(changes(registry, null, tasks(new TaskUpdate(task, taskSet(null, null, to(early)))), null).violations())
+                .containsExactly("plan.update.tasks[0].set.deadline: AFTER_PROJECT_DEADLINE(" + TODAY.plusDays(5) + ")");
+
+        // сокращение срока проекта ниже срока известной задачи
+        Update shrink = new Update(null, List.of(new ProjectUpdate(project, deadline(TODAY.plusDays(10)))), null, null);
+        assertThat(changes(registry, null, shrink, null).violations())
+                .containsExactly("plan.update.projects[0].set.deadline: BEFORE_TASK_DEADLINE(" + TODAY.plusDays(20) + ")");
+
+        // то же, но задаче в этом же плане срок сдвинут раньше — или она удаляется
+        Update both = new Update(List.of(new TaskUpdate(task, taskSet(null, to(TODAY.plusDays(8)), null))),
+                List.of(new ProjectUpdate(project, deadline(TODAY.plusDays(10)))), null, null);
+        assertThat(changes(registry, null, both, null).violations()).isEmpty();
+        assertThat(changes(registry, null, shrink, List.of(new Delete(task))).violations()).isEmpty();
     }
 }

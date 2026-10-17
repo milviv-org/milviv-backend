@@ -23,6 +23,8 @@ import com.milviv.application.ai.AiLimits;
 import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.ExecuteAiPlan;
 import com.milviv.application.ai.AiTurnValidator;
+import com.milviv.application.ai.DecideAiProposal;
+import com.milviv.application.ai.PreviewBuilder;
 import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.application.gamification.HiddenRewardsAccess;
 import com.milviv.application.gamification.PointsQueries;
@@ -249,7 +251,9 @@ public class Main {
                     .register(AiTurnValidator.class)
                     .register(ExecuteAiPlan.class)
                     .register(AiDataCatalog.class)
-                    .register(HandleAiRequest.class);
+                    .register(PreviewBuilder.class)
+                    .register(HandleAiRequest.class)
+                    .register(DecideAiProposal.class);
 
             // ═══════════════════════════════════════════════════════════
             // ФАЗА 3: Проверки и запуск

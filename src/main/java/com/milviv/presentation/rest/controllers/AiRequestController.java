@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.milviv.application.ai.AiRequestView;
+import com.milviv.application.ai.DecideAiProposal;
 import com.milviv.application.ai.HandleAiRequest;
 import com.milviv.infrastructure.http.HttpContext;
 import com.milviv.infrastructure.http.annotations.Controller;
@@ -22,10 +23,15 @@ public class AiRequestController {
 
     record AiRequestListResponse(List<AiRequestView> items) {}
 
-    private final HandleAiRequest handleAiRequest;
+    /** @param approvedChangeIds itemId из карточки; пустой список — отклонить всё */
+    record ExecutionRequest(List<String> approvedChangeIds) {}
 
-    public AiRequestController(HandleAiRequest handleAiRequest) {
+    private final HandleAiRequest handleAiRequest;
+    private final DecideAiProposal decideAiProposal;
+
+    public AiRequestController(HandleAiRequest handleAiRequest, DecideAiProposal decideAiProposal) {
         this.handleAiRequest = handleAiRequest;
+        this.decideAiProposal = decideAiProposal;
     }
 
     /** Новый запрос — 201, повтор с тем же Idempotency-Key — 200 с тем же телом. */
@@ -47,5 +53,20 @@ public class AiRequestController {
     public void get(HttpContext ctx) throws Exception {
         UUID requestId = RequestParams.pathId(ctx, "Запрос не найден");
         ctx.json(200, handleAiRequest.get(ctx.userId(), requestId));
+    }
+
+    /** Исполнить отмеченные изменения и удаления. Повтор с тем же набором — 200 с тем же телом. */
+    @Post("/{id}/execution")
+    public void execution(HttpContext ctx) throws Exception {
+        UUID requestId = RequestParams.pathId(ctx, "Запрос не найден");
+        ExecutionRequest body = ctx.body(ExecutionRequest.class);
+        ctx.json(200, decideAiProposal.execute(ctx.userId(), requestId, body.approvedChangeIds()));
+    }
+
+    /** Отклонить всё: изменения и удаления не исполняются, созданное остаётся. */
+    @Post("/{id}/rejection")
+    public void rejection(HttpContext ctx) throws Exception {
+        UUID requestId = RequestParams.pathId(ctx, "Запрос не найден");
+        ctx.json(200, decideAiProposal.reject(ctx.userId(), requestId));
     }
 }

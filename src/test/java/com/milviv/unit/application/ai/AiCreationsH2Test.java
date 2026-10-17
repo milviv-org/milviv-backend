@@ -25,6 +25,7 @@ import com.milviv.application.ai.AiPlanPolicy;
 import com.milviv.application.ai.AiTurnValidator;
 import com.milviv.application.ai.ExecuteAiPlan;
 import com.milviv.application.ai.HandleAiRequest;
+import com.milviv.application.ai.PreviewBuilder;
 import com.milviv.application.ai.contract.AiTurn;
 import com.milviv.application.ai.contract.PlanDraft;
 import com.milviv.application.ai.contract.PlanDraft.Create;
@@ -76,8 +77,10 @@ class AiCreationsH2Test {
     private final UUID alice = UUID.randomUUID();
     private final UUID bob = UUID.randomUUID();
 
-    /** ExecuteAiPlan на настоящих ручных сценариях — так же, как в Main. */
-    static ExecuteAiPlan executeAiPlan(TransactionalConnectionProvider connections, TransactionManager tx, Clock clock) {
+    /** Ручные сценарии на настоящих репозиториях — так же, как в Main. */
+    record Commands(GoalCommands goals, ProjectCommands projects, TaskCommands tasks, RewardCommands rewards) {}
+
+    static Commands commands(TransactionalConnectionProvider connections, TransactionManager tx, Clock clock) {
         var tasks = new TaskJdbcRepository(connections);
         var projects = new ProjectJdbcRepository(connections);
         var goals = new GoalJdbcRepository(connections);
@@ -87,13 +90,22 @@ class AiCreationsH2Test {
         };
         var hiddenAccess = new HiddenRewardsAccess(new HiddenRewardsPasswordJdbcRepository(connections), hasher,
                 new InMemoryLoginAttemptLimiter(5, Duration.ofMinutes(15), clock), tx);
-        return new ExecuteAiPlan(
+        return new Commands(
                 new GoalCommands(goals, tx, clock),
                 new ProjectCommands(projects, tasks, goals, tx, clock),
                 new TaskCommands(tasks, projects, goals, new TaskReflectionJdbcRepository(connections), tx, clock),
                 new RewardCommands(new RewardJdbcRepository(connections), new PointsHistoryJdbcRepository(connections),
-                        hiddenAccess, tx, clock),
-                tx);
+                        hiddenAccess, tx, clock));
+    }
+
+    static ExecuteAiPlan executeAiPlan(TransactionalConnectionProvider connections, TransactionManager tx, Clock clock) {
+        Commands c = commands(connections, tx, clock);
+        return new ExecuteAiPlan(c.goals(), c.projects(), c.tasks(), c.rewards(), tx);
+    }
+
+    static PreviewBuilder previewBuilder(TransactionalConnectionProvider connections, TransactionManager tx, Clock clock) {
+        Commands c = commands(connections, tx, clock);
+        return new PreviewBuilder(c.goals(), c.projects(), c.tasks(), c.rewards());
     }
 
     /** Каталог на настоящих репозиториях — так же, как в Main. */
@@ -126,7 +138,7 @@ class AiCreationsH2Test {
 
     private HandleAiRequest handler(FakeAiAssistant ai, AiLimits limits) {
         return new HandleAiRequest(consents, ai, new AiTurnValidator(limits, new AiPlanPolicy(limits)),
-                executeAiPlan(connections, tx, clock), catalog(connections, limits, tx),
+                executeAiPlan(connections, tx, clock), previewBuilder(connections, tx, clock), catalog(connections, limits, tx),
                 new AiRequestJdbcRepository(connections, HandleAiRequestH2Test.MAPPER),
                 limits, tx, clock);
     }
